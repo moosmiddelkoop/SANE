@@ -1,22 +1,26 @@
-import torch
-import torch.nn as nn
-import numpy as np
-from .def_AE import AE
-from .def_loss import GammaContrastReconLoss
-import itertools
-
-import logging
-
 import inspect
-
-from lightning.fabric import Fabric
-from lightning.fabric import seed_everything
-
+import logging
+import os
+import random
 from pathlib import Path
 
+import numpy as np
+import torch
+import torch.nn as nn
+import tqdm
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-import tqdm
+from .def_AE import AE
+from .def_loss import GammaContrastReconLoss
+
+
+def seed_everything(seed: int) -> int:
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    return seed
 
 
 class AEModule(nn.Module):
@@ -80,11 +84,9 @@ class AEModule(nn.Module):
         self.set_optimizer(config)
 
         # automatic mixed precision
-        self.use_amp = (
-            True if config.get("training::precision", "full") == "amp" else False
-        )
+        self.use_amp = True if config.get("training::precision", "full") == "amp" else False
         if self.use_amp:
-            print(f"++++++ USE AUTOMATIC MIXED PRECISION +++++++")
+            print("++++++ USE AUTOMATIC MIXED PRECISION +++++++")
             self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
         # init gradien clipping
@@ -119,9 +121,7 @@ class AEModule(nn.Module):
         # nn.utils.clip_grad_value_(self.params, self.clipping_value)
         nn.utils.clip_grad_value_(self.parameters(), self.clipping_value)
 
-    def set_transforms(
-        self, transforms_train=None, transforms_test=None, transforms_downstream=None
-    ):
+    def set_transforms(self, transforms_train=None, transforms_test=None, transforms_downstream=None):
         if transforms_train is not None:
             self.transforms_train = transforms_train
         else:
@@ -180,12 +180,8 @@ class AEModule(nn.Module):
         ]
         num_decay_params = sum(p.numel() for p in decay_params)
         num_nodecay_params = sum(p.numel() for p in nodecay_params)
-        print(
-            f"num decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters"
-        )
-        print(
-            f"num non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters"
-        )
+        print(f"num decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters")
+        print(f"num non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters")
         if config.get("optim::optimizer", "adamw") == "sgd":
             self.optimizer = torch.optim.SGD(
                 params=self.parameters(),
@@ -224,9 +220,7 @@ class AEModule(nn.Module):
                 weight_decay=config.get("optim::wd", 3e-5),
             )
         else:
-            raise NotImplementedError(
-                f'the optimizer {config.get("optim::optimizer", "adam")} is not implemented. break'
-            )
+            raise NotImplementedError(f"the optimizer {config.get('optim::optimizer', 'adam')} is not implemented. break")
 
     def set_scheduler(self, config):
         if config.get("optim::scheduler", None) == None:
@@ -272,7 +266,6 @@ class AEModule(nn.Module):
                 final_div_factor=10000.0,
                 three_phase=False,
                 last_epoch=-1,
-                verbose=False,
             )
 
     def save_model(self, experiment_dir):
@@ -416,9 +409,7 @@ class AEModule(nn.Module):
         ):
             # # move data to device
             # data = (ddx.to(self.device) for ddx in data)
-            data = [
-                ddx.to(self.device) for ddx in data
-            ]  # use list instead of tuple, generator objects can cause problems..
+            data = [ddx.to(self.device) for ddx in data]  # use list instead of tuple, generator objects can cause problems..
             # pass through transforms (if any)
             x_i, m_i, p_i, x_j, m_j, p_j = self.transforms_train(*data)
 
@@ -497,9 +488,7 @@ class AEModule(nn.Module):
             # x, m, p = data
             # # move data to device
             # data = (ddx.to(self.device) for ddx in data)
-            data = [
-                ddx.to(self.device) for ddx in data
-            ]  # use list instead of tuple, generator objects can cause problems..
+            data = [ddx.to(self.device) for ddx in data]  # use list instead of tuple, generator objects can cause problems..
             # pass through transforms (if any)
             x_i, m_i, p_i, x_j, m_j, p_j = self.transforms_test(*data)
             ### explicit, old way
