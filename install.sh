@@ -1,4 +1,7 @@
 #!/bin/bash
+python -m venv .venv
+source .venv/bin/activate
 
-uv pip install -e .
-uv pip install ray==2.6.1 pyarrow imageio
+pip install -e .
+pip install "numpy<2" ray==2.6.1 pyarrow imageio
+pip install requirements.txt
