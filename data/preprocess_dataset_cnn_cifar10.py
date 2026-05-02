@@ -57,10 +57,10 @@ logging.basicConfig(level=logging.INFO)
 
 def prep_data():
     dataset_target_path = [
-        Path("./dataset_cnn_cifar10_ep21-25_std/"),
+        Path("/scratch-shared/mmiddelkoop/SANE/data/dataset_cnn_cifar10_ep21-25_std/"),
     ]
     zoo_path = [  
-        Path("./tune_zoo_cifar10_uniform_large/").absolute()
+        Path("/scratch-shared/mmiddelkoop/SANE/data/tune_zoo_cifar10_uniform_large/").absolute()
     ]
     zoo_path_and_permutation_spec_and_target_path = [
         (zoo_path[0], zoo_cnn_large_permutation_spec, dataset_target_path[0]),

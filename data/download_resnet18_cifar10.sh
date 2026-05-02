@@ -4,7 +4,7 @@
 URLS=(
     "https://zenodo.org/records/6977382/files/cifar100_resnet18_epoch60.zip"
 )
-TARGET_DIR="."
+TARGET_DIR="/scratch-shared/mmiddelkoop/SANE/data/"
 
 # Create the target directory if it doesn't exist
 mkdir -p ${TARGET_DIR}
