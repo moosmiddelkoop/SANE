@@ -2,7 +2,7 @@
 
 # Define the list of URLs and target directory
 URLS=(
-    "https://zenodo.org/records/6977382/files/cifar100_resnet18_epoch60.zip"
+    "https://zenodo.org/records/6977382/files/cifar10_resnet18_epoch60.zip"
 )
 TARGET_DIR="/scratch-shared/mmiddelkoop/SANE/data/"
 

@@ -79,7 +79,7 @@ def prep_data():
         "testset": ds_test,
     }
 
-    torch.save(dataset, dataset_target_path + "dataset.pt")
+    torch.save(dataset, dataset_target_path / "dataset.pt")
 
 
 def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_fn=None):
