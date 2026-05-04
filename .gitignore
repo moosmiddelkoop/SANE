@@ -15,6 +15,7 @@ __pycache__/*
 .*.swp
 */.ipynb_checkpoints/*
 .DS_Store
+/paper/*
 
 # C extensions
 *.so
