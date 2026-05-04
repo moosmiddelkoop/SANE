@@ -57,9 +57,7 @@ def prep_data():
     dataset_target_path = [
         Path("/scratch-shared/mmiddelkoop/SANE/data/dataset_cifar100_token_288_ep60_std/"),
     ]
-    zoo_path = [
-        Path("/scratch-shared/mmiddelkoop/SANE/data/cifar100_resnet18_kaiming_uniform_ep60_no_opt/").absolute()
-    ]
+    zoo_path = [Path("/scratch-shared/mmiddelkoop/SANE/data/cifar100_resnet18_kaiming_uniform_ep60_no_opt/").absolute()]
     zoo_path_and_permutation_spec_and_target_path = [
         (zoo_path[0], resnet18_permutation_spec, dataset_target_path[0]),
     ]
