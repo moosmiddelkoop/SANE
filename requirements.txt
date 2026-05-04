@@ -103,3 +103,6 @@ wandb==0.26.1
 wcwidth==0.6.0
 widgetsnbextension==4.0.15
 yarl==1.23.0
+scipy
+ray==2.6.1
+rebasin
