@@ -4,35 +4,20 @@ logging.basicConfig(level=logging.INFO)
 
 import os
 
-# set environment variables to limit cpu usage
-os.environ["OMP_NUM_THREADS"] = "4"  # export OMP_NUM_THREADS=4
-os.environ["OPENBLAS_NUM_THREADS"] = "4"  # export OPENBLAS_NUM_THREADS=4
-os.environ["MKL_NUM_THREADS"] = "6"  # export MKL_NUM_THREADS=6
-os.environ["VECLIB_MAXIMUM_THREADS"] = "4"  # export VECLIB_MAXIMUM_THREADS=4
-os.environ["NUMEXPR_NUM_THREADS"] = "6"  # export NUMEXPR_NUM_THREADS=6
-
-import torch
-
-import ray
-from ray import tune
-
-from ray.air.integrations.wandb import WandbLoggerCallback
-from SANE.evaluation.ray_fine_tuning_callback import CheckpointSamplingCallback
-from SANE.evaluation.ray_fine_tuning_callback_subsampled import (
-    CheckpointSamplingCallbackSubsampled,
-)
-from SANE.evaluation.ray_fine_tuning_callback_bootstrapped import (
-    CheckpointSamplingCallbackBootstrapped,
-)
-
-import json
+# Snellius A100 node: 18 CPU cores per GPU. With 8 DataLoader workers + 1 main
+# process, 2 BLAS threads each saturates the allocation without oversubscription.
+os.environ["OMP_NUM_THREADS"] = "2"
+os.environ["OPENBLAS_NUM_THREADS"] = "2"
+os.environ["MKL_NUM_THREADS"] = "2"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "2"
+os.environ["NUMEXPR_NUM_THREADS"] = "2"
 
 from pathlib import Path
 
+import ray
+import torch
 
 from SANE.models.def_AE_trainable import AE_trainable
-from SANE.datasets.dataset_sampling_preprocessed import PreprocessedSamplingDataset
-
 
 PATH_ROOT = Path("./")
 
@@ -41,7 +26,7 @@ def main():
     ### set experiment resources ####
     print(f"torch.cuda.is_available: {torch.cuda.is_available()}")
     # ray init to limit memory and storage
-    cpus_per_trial = 10
+    cpus_per_trial = 18
     gpus_per_trial = 1
     gpus = 1
     cpus = gpus * cpus_per_trial
@@ -121,7 +106,7 @@ def main():
     # prep_data(target_dataset_path=data_path)
 
     ### Augmentations
-    config["trainloader::workers"] = 6
+    config["trainloader::workers"] = 8
     config["trainset::add_noise_view_1"] = 0.1
     config["trainset::add_noise_view_2"] = 0.1
     config["trainset::noise_multiplicative"] = True
