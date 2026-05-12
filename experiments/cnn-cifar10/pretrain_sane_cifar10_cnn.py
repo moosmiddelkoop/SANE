@@ -51,7 +51,6 @@ def main():
 
     # permutation specs
     config["training::permutation_number"] = 5
-    config["training::view_2_canon"] = False
     config["training::view_2_canon"] = True
     config["testing::permutation_number"] = 5
     config["testing::view_1_canon"] = True
@@ -81,7 +80,7 @@ def main():
     # AMP
     #
     config["training::epochs_train"] = 50
-    config["training::output_epoch"] = 25
+    config["training::output_epoch"] = 5
     config["training::test_epochs"] = 1
 
     config["monitor_memory"] = True
