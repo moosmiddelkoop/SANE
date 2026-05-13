@@ -89,7 +89,7 @@ def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_
     num_threads = 5
     shuffle_path = True
     windowsize = 64
-    supersample = 3
+    supersample = "auto"
     precision = "32"
     ignore_bn = True
     tokensize = 0  # discover tokensize

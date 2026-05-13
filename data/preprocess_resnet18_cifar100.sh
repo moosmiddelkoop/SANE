@@ -6,7 +6,8 @@
 #SBATCH --cpus-per-task=18
 #SBATCH --time=06:00:00
 #SBATCH --output=logs/preprocess_%j.out
-#SBATCH --error=logs/preprocess_%j.err
+#SBATCH --mail-type=END
+#SBATCH --mail-user=moos@cwi.nl
 
 set -euo pipefail
 
