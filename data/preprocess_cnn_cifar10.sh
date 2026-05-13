@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=preprocess_cnn_cifar10_v4
+#SBATCH --job-name=preprocess_cnn_cifar10_half
 #SBATCH --partition=gpu_a100
 #SBATCH --gpus=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
 #SBATCH --time=12:00:00
-#SBATCH --output=logs/preprocess_cnn_v4%j.out
+#SBATCH --output=logs/preprocess_cnn_half_%j.out
 #SBATCH --mail-type=END
 #SBATCH --mail-user=moos@cwi.nl
 
