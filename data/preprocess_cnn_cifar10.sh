@@ -1,12 +1,14 @@
 #!/bin/bash
-#SBATCH --job-name=preprocess_resnet18_cifar100
+#SBATCH --job-name=preprocess_cnn_cifar100
 #SBATCH --partition=gpu_a100
 #SBATCH --gpus=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
-#SBATCH --time=06:00:00
-#SBATCH --output=logs/preprocess_%j.out
-#SBATCH --error=logs/preprocess_%j.err
+#SBATCH --time=12:00:00
+#SBATCH --output=logs/preprocess_cnn_%j.out
+#SBATCH --error=logs/preprocess_cnn_%j.err
+#SBATCH --mail-type=END
+#SBATCH --mail-user=moos@cwi.nl
 
 set -euo pipefail
 
@@ -14,4 +16,4 @@ set -euo pipefail
 source "$HOME/SANE/.venv/bin/activate"
 
 cd "$HOME/SANE/data"
-python preprocess_dataset_resnet18_cifar100_tk288.py
+python preprocess_dataset_cnn_cifar10.py
