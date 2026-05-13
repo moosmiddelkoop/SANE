@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=preprocess_cnn_cifar100_v4
+#SBATCH --job-name=preprocess_cnn_cifar10_v4
 #SBATCH --partition=gpu_a100
 #SBATCH --gpus=1
 #SBATCH --ntasks=1
