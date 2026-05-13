@@ -55,7 +55,7 @@ logging.basicConfig(level=logging.INFO)
 
 def prep_data():
     dataset_target_path = [
-        Path("/scratch-shared/mmiddelkoop/SANE/data/dataset_cnn_cifar10_ep05-50_std_v4/"),
+        Path("/scratch-shared/mmiddelkoop/SANE/data/dataset_cnn_cifar10_ep10-50_std/"),
     ]
     zoo_path = [Path("/scratch-shared/mmiddelkoop/SANE/data/tune_zoo_cifar10_uniform_large/").absolute()]
     zoo_path_and_permutation_spec_and_target_path = [
@@ -80,7 +80,7 @@ def prep_data():
 
 def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_fn=None):
     # static parameters
-    epoch_list = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50]
+    epoch_list = [10, 20, 30, 40, 50]
     map_to_canonical = True
     standardize = True
     ds_split = [0.7, 0.15, 0.15]
