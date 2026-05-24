@@ -61,7 +61,7 @@ def main():
     config["ae:i_dim"] = 289
     config["ae:lat_dim"] = 128
     config["ae:max_positions"] = [100, 10, 40]
-    config["training::windowsize"] = 64
+    config["training::windowsize"] = 93
     config["ae:d_model"] = 1024
     config["ae:nhead"] = 8
     config["ae:num_layers"] = 8
@@ -95,7 +95,7 @@ def main():
     ###### Datasets ###########################################################################
     # pre-compute dataset and drop in torch.save
     # data_path = output_dir.joinpath(experiment_name)
-    data_path = Path("../../data/dataset_cnn_cifar10_sample_ep21-25_std/")
+    data_path = Path("/scratch-shared/mmiddelkoop/SANE/data/dataset_cnn_cifar10_ep10-50_std_93tok/")
     data_path.mkdir(exist_ok=True)
     # path to ffcv dataset for training
     config["dataset::dump"] = data_path.joinpath("dataset.pt").absolute()
