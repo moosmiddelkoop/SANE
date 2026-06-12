@@ -109,12 +109,12 @@ class ModelDatasetBaseEpochs(Dataset):
         self.reference_path = copy.deepcopy(ref_path)
         self.reference_epoch = copy.deepcopy(ref_ep)
 
+        assert self.reference_checkpoint is not None, "no reference checkpoint found"
+        logging.info(f"reference checkpoint found at {self.reference_path}")
+
         config_path = ref_path.joinpath("params.json")
         ref_config = json.load(config_path.open("r"))
         self.reference_config = ref_config
-
-        assert self.reference_checkpoint is not None, "no reference checkpoint found"
-        logging.info(f"reference checkpoint found at {self.reference_path}")
 
         ### Split Train and Test set ###########################################################################
         assert (
