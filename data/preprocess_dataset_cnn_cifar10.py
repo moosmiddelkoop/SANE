@@ -55,6 +55,10 @@ def prep_data():
     dataset_target_path = [
         Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist_preprocessed/"),
     ]
+    # mkdir target path if it does not exist
+    for path in dataset_target_path:
+        path.mkdir(parents=True, exist_ok=True)
+
     zoo_path = [Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/").absolute()]
     zoo_path_and_permutation_spec_and_target_path = [
         (zoo_path[0], smallcnnzoo_permutation_spec, dataset_target_path[0]),
