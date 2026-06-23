@@ -111,7 +111,7 @@ def prepare_dataset(
     shuffle_path: bool = True,
     windowsize: int = 160,
     supersample: Union[str, int] = "auto",
-    precision: int = 16,
+    precision: str = "16",
     ignore_bn: bool = True,
     tokensize: int = 576,
     permutation_number_train: int = 0,
@@ -324,7 +324,6 @@ def preprocess_single_split(
     # """
     write_path = Path(dataset_target_path).joinpath(f"dataset_torch.{split}")
     logging.info(f"write_path: {write_path}")
-    logging.info(f"number of files to be written: {len(dataset) * supersample}")
 
     save_dataset(dataset, write_path)
 
