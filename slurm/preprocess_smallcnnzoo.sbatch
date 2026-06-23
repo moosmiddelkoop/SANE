@@ -1,8 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=preprocess_smallcnnzoo
-#SBATCH --partition=genoa
+#SBATCH --partition=gpu_a100
+#SBATCH --gpus=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=24
+#SBATCH --cpus-per-task=18
 #SBATCH --time=04:00:00
 #SBATCH --output=slurm/logs/preprocess_smallcnnzoo_%j.out
 #SBATCH --mail-user=moos@cwi.nl
