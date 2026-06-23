@@ -1,5 +1,17 @@
 # prepare data
 import logging
+import os
+
+# Single-threaded BLAS per worker: preprocessing parallelizes across CPUs via Ray
+# (many lightweight checkpoint-loading workers), so multi-threaded BLAS would
+# oversubscribe cores without helping the tiny per-model tensor ops. Must be set
+# before torch/numpy import.
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 from pathlib import Path
 
 import torch
@@ -88,7 +100,12 @@ def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_
     ds_split = [0.7, 0.15, 0.15]
     max_samples = None  # for smoke tests (truncates the amount of models being preprocessed)
     weight_threshold = 100  # drops any checkoint with blown up weights of a magnitude above this threshold
-    num_threads = 12
+    # use all CPU cores allocated to this job (respects the SLURM/cgroup allocation
+    # on Snellius); falls back to the full machine count when off-cluster
+    try:
+        num_threads = len(os.sched_getaffinity(0))  # type: ignore[attr-defined]  # Linux-only
+    except AttributeError:
+        num_threads = os.cpu_count()
     shuffle_path = True
     windowsize = 58
     supersample = 1
