@@ -55,7 +55,7 @@ logging.basicConfig(level=logging.INFO)
 
 def prep_data():
     dataset_target_path = [
-        Path("/scratch-shared/mmiddelkoop/SANE/data/dataset_cnn_cifar10_ep10-50_std/"),
+        Path("/scratch-shared/mmiddelkoop/SANE/data/dataset_cnn_cifar10_ep10-50_std_93tok/"),
     ]
     zoo_path = [Path("/scratch-shared/mmiddelkoop/SANE/data/tune_zoo_cifar10_uniform_large/").absolute()]
     zoo_path_and_permutation_spec_and_target_path = [
@@ -88,11 +88,11 @@ def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_
     weight_threshold = 100
     num_threads = 5
     shuffle_path = True
-    windowsize = 64
-    supersample = "auto"
+    windowsize = 93
+    supersample = 1
     precision = "32"
     ignore_bn = True
-    tokensize = 0  # discover tokensize
+    tokensize = 289
 
     # permutation spec
     permutation_number_train = 200

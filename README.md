@@ -68,6 +68,8 @@ python3 property_prediction_cifar100_resnet18.py
 ```
 within `experiments`. This will compute the property prediction results from both SANE embeddings and weight-statistic baselines and save them in a `json`.
 
+> **Note — downstream encoding must match pretraining preprocessing.** The property-prediction and sampling/finetune scripts re-tokenize raw checkpoints before passing them through the trained SANE encoder. The `permutation_spec`, `map_to_canonical`, `ignore_bn`, and standardization settings used here **must** match what was used when the pretraining dataset was generated (see `data/preprocess_dataset_*.py`); otherwise embeddings will be off-distribution and downstream metrics will silently degrade. The `epoch_list` is the only preprocessing knob that is free to differ — it just picks which checkpoints to encode.
+
 ### Generating Models
 Generating models can provide initializations even for new tasks and architectures that give an advantage over random initializations, see the Figure below.
 ![SANE weight generation comparison. Models initialized with SANE outperform random initialization on new models or tasks](assets/sample_models.png)
