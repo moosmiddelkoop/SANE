@@ -268,8 +268,8 @@ def preprocess_single_split(
         precision=precision,
         filter_function=filter_fn,  # gets sample path as argument and returns True if model needs to be filtered out
         property_keys=property_keys,
-        num_threads=12,
-        shuffle_path=True,
+        num_threads=num_threads,  # these were hardcoded before (to 12)
+        shuffle_path=shuffle_path,  # these were hardcoded before (to True)
         verbosity=3,
         mode="checkpoint",  # apply permutation on checkpoint
         getitem="tokens+props",
