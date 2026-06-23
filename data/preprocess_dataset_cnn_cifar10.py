@@ -6,9 +6,7 @@ import torch
 
 from SANE.datasets.dataset_preprocessing import prepare_multiple_datasets
 from SANE.datasets.dataset_sampling_preprocessed import PreprocessedSamplingDataset
-from SANE.git_re_basin.git_re_basin import (
-    zoo_cnn_large_permutation_spec,
-)
+from SANE.git_re_basin.git_re_basin import smallcnnzoo_permutation_spec
 
 logging.basicConfig(level=logging.INFO)
 
@@ -55,11 +53,11 @@ logging.basicConfig(level=logging.INFO)
 
 def prep_data():
     dataset_target_path = [
-        Path("/scratch-shared/mmiddelkoop/SANE/data/dataset_cnn_cifar10_ep10-50_std_93tok/"),
+        Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist_preprocessed/"),
     ]
-    zoo_path = [Path("/scratch-shared/mmiddelkoop/SANE/data/tune_zoo_cifar10_uniform_large/").absolute()]
+    zoo_path = [Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/").absolute()]
     zoo_path_and_permutation_spec_and_target_path = [
-        (zoo_path[0], zoo_cnn_large_permutation_spec, dataset_target_path[0]),
+        (zoo_path[0], smallcnnzoo_permutation_spec, dataset_target_path[0]),
     ]
     configurations = create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_fn=None)
     prepare_multiple_datasets(configurations=configurations)
@@ -80,19 +78,19 @@ def prep_data():
 
 def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_fn=None):
     # static parameters
-    epoch_list = [10, 20, 30, 40, 50]
+    epoch_list = [0, 1, 2, 3, 4, 5, 6, 7, 8]
     map_to_canonical = True
     standardize = True
     ds_split = [0.7, 0.15, 0.15]
-    max_samples = None
-    weight_threshold = 100
-    num_threads = 5
+    max_samples = None  # for smoke tests (truncates the amount of models being preprocessed)
+    weight_threshold = 100  # drops any checkoint with blown up weights of a magnitude above this threshold
+    num_threads = 12
     shuffle_path = True
-    windowsize = 93
+    windowsize = 58
     supersample = 1
     precision = "32"
     ignore_bn = True
-    tokensize = 289
+    tokensize = 145
 
     # permutation spec
     permutation_number_train = 200
