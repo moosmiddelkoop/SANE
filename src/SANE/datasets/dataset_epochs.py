@@ -199,11 +199,15 @@ class ModelDatasetBaseEpochs(Dataset):
 
         ray.shutdown()
 
-        # remove None values
-        data = [[ddx for ddx in data[idx] if ddx] for idx in range(len(data))]
-        labels = [[ddx for ddx in labels[idx] if ddx] for idx in range(len(labels))]
-        epochs = [[ddx for ddx in epochs[idx] if ddx] for idx in range(len(epochs))]
-        paths = [[ddx for ddx in paths[idx] if ddx] for idx in range(len(paths))]
+        # remove None values (failed/filtered loads return None for all four
+        # fields). Filter on `is not None` rather than truthiness so that valid
+        # falsy values are preserved -- notably epoch 0, which is a legitimate
+        # epoch but would be dropped by `if ddx`, desyncing epochs/properties
+        # from data and causing an IndexError in __getitem__.
+        data = [[ddx for ddx in data[idx] if ddx is not None] for idx in range(len(data))]
+        labels = [[ddx for ddx in labels[idx] if ddx is not None] for idx in range(len(labels))]
+        epochs = [[ddx for ddx in epochs[idx] if ddx is not None] for idx in range(len(epochs))]
+        paths = [[ddx for ddx in paths[idx] if ddx is not None] for idx in range(len(paths))]
         # remove empty values
         data = [ddx for ddx in data if len(ddx) > 0]
         labels = [ddx for ddx in labels if len(ddx) > 0]
