@@ -1,25 +1,20 @@
+import copy
+import json
+import logging
+import random
 from pathlib import Path
 
+import ray
 import torch
-
+import tqdm
 from torch.utils.data import Dataset
-
 
 from SANE.datasets.dataset_auxiliaries import (
     test_checkpoint_for_nan,
     test_checkpoint_with_threshold,
 )
 
-import random
-import copy
-import json
-import tqdm
-
-
-import ray
 from .progress_bar import ProgressBar
-
-import logging
 
 
 class ModelDatasetBaseEpochs(Dataset):
@@ -117,9 +112,9 @@ class ModelDatasetBaseEpochs(Dataset):
         self.reference_config = ref_config
 
         ### Split Train and Test set ###########################################################################
-        assert (
-            abs(sum(self.ds_split) - 1.0) < 1e-8
-        ), f"dataset splits {self.ds_split} sum up to {sum(self.ds_split)} but should equal to 1"
+        assert abs(sum(self.ds_split) - 1.0) < 1e-8, (
+            f"dataset splits {self.ds_split} sum up to {sum(self.ds_split)} but should equal to 1"
+        )
         # two splits
         if len(self.ds_split) == 2:
             if self.train_val_test == "train":
@@ -129,12 +124,8 @@ class ModelDatasetBaseEpochs(Dataset):
                 idx1 = int(self.ds_split[0] * len(self.path_list))
                 self.path_list = self.path_list[idx1:]
             else:
-                logging.error(
-                    "validation split requested, but only two splits provided."
-                )
-                raise NotImplementedError(
-                    "validation split requested, but only two splits provided."
-                )
+                logging.error("validation split requested, but only two splits provided.")
+                raise NotImplementedError("validation split requested, but only two splits provided.")
         # three splits
         elif len(self.ds_split) == 3:
             if self.train_val_test == "train":
@@ -149,7 +140,7 @@ class ModelDatasetBaseEpochs(Dataset):
                 idx2 = idx1 + int(self.ds_split[1] * len(self.path_list))
                 self.path_list = self.path_list[idx2:]
         else:
-            logging.warning(f"dataset splits are unintelligble. Load 100% of dataset")
+            logging.warning("dataset splits are unintelligble. Load 100% of dataset")
             pass
 
         ### prepare data lists ###############
@@ -229,7 +220,7 @@ class ModelDatasetBaseEpochs(Dataset):
         )
 
         if self.property_keys is not None:
-            logging.info(f"Load properties for samples from paths.")
+            logging.info("Load properties for samples from paths.")
 
             # get propertys from path
             result_keys = self.property_keys.get("result_keys", [])
@@ -248,16 +239,14 @@ class ModelDatasetBaseEpochs(Dataset):
                     config_key_list=config_keys,
                     idx_offset=1,
                 )
-            logging.info(f"Properties loaded.")
+            logging.info("Properties loaded.")
         else:
             self.properties = None
 
     ## getitem ####################################################################################################################################################################
     def __getitem__(self, index):
         # not implemented in base class
-        raise NotImplementedError(
-            "the __getitem__ function is not implemented in the base class. "
-        )
+        raise NotImplementedError("the __getitem__ function is not implemented in the base class. ")
         pass
 
     ## len ####################################################################################################################################################################
@@ -325,9 +314,7 @@ class ModelDatasetBaseEpochs(Dataset):
                 # assert epoch == training_iteration -> match correct data
                 if iidx == 0:
                     train_it = int(res_tmp["training_iteration"])
-                    assert (
-                        int(eedx) == train_it
-                    ), f"training iteration {train_it} and epoch {eedx} don't match."
+                    assert int(eedx) == train_it, f"training iteration {train_it} and epoch {eedx} don't match."
 
             # transfer model lists to properties dict
             for key in results_key_list:
@@ -443,9 +430,7 @@ def load_checkpoints_remote(
             return None, None, None, None
 
     #### apply threhold #################################################################
-    thresh_flag = test_checkpoint_with_threshold(
-        copy.deepcopy(chkpoint), threshold=weight_threshold
-    )
+    thresh_flag = test_checkpoint_with_threshold(copy.deepcopy(chkpoint), threshold=weight_threshold)
     if thresh_flag == True:
         if verbosity > 5:
             # jump to next sample
@@ -482,7 +467,7 @@ def load_checkpoint(
         except FileNotFoundError as e:
             logging.debug(f"File not found. try again with different formatting: {e}")
 
-            # use other formatting
+            # use other formatting (leading zeros)
             chkpth = path.joinpath(f"checkpoint_{edx:06d}", "checkpoints")
             # load chkpoint to cpu memory
             chkpoint = torch.load(str(chkpth), map_location=torch.device("cpu"))
@@ -505,9 +490,7 @@ def load_checkpoint(
             return None, None, None, None
 
     #### apply threhold #################################################################
-    thresh_flag = test_checkpoint_with_threshold(
-        copy.deepcopy(chkpoint), threshold=weight_threshold
-    )
+    thresh_flag = test_checkpoint_with_threshold(copy.deepcopy(chkpoint), threshold=weight_threshold)
     if thresh_flag == True:
         return None, None, None, None
 
