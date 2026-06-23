@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 SANE (Sequential Autoencoder for Neural Embeddings) — research code for the ICML 2024 paper "Towards Scalable and Versatile Weight Space Learning". The package learns task-agnostic representations of neural network *weights* by tokenizing model weights and training a transformer autoencoder over those token sequences. Downstream uses: predicting model properties (test_acc, ggap, epoch) and generating/finetuning new models from sampled embeddings.
 
-The accompanying paper can be found in `paper/` (both .tex source and pdf). I am trying to use SANE for my weight space unlearning work (see paper in `CNNZoo_surgery_ICML2026-13.pdf`), but that code is not yet in this repo.
+The accompanying paper can be found in `paper/` (both .tex source, .md and .pdf versions). I am trying to use SANE for my weight space unlearning work (see paper in `CNNZoo_surgery_ICML2026-13.pdf`), but that code is not yet in this repo.
 
 Tests use pytest (configured in `setup.cfg` with `--cov SANE`); however `tests/` is not present in the repo, so there is currently no test suite to run.
 
