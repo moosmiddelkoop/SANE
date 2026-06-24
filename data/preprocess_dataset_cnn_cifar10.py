@@ -102,10 +102,11 @@ def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_
     weight_threshold = 100  # drops any checkoint with blown up weights of a magnitude above this threshold
     # use all CPU cores allocated to this job (respects the SLURM/cgroup allocation
     # on Snellius); falls back to the full machine count when off-cluster
-    try:
-        num_threads = len(os.sched_getaffinity(0))  # type: ignore[attr-defined]  # Linux-only
-    except AttributeError:
-        num_threads = os.cpu_count()
+    # try:
+    #     num_threads = len(os.sched_getaffinity(0))  # type: ignore[attr-defined]  # Linux-only
+    # except AttributeError:
+    #     num_threads = os.cpu_count()
+    num_threads = 12
     shuffle_path = True
     windowsize = 58
     supersample = 1

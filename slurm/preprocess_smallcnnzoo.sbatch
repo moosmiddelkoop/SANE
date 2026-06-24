@@ -4,7 +4,7 @@
 #SBATCH --gpus=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
-#SBATCH --time=04:00:00
+#SBATCH --time=12:00:00
 #SBATCH --output=slurm/logs/preprocess_smallcnnzoo_%j.out
 #SBATCH --mail-user=moos@cwi.nl
 #SBATCH --mail-type=END,FAIL

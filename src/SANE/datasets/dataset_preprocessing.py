@@ -71,9 +71,11 @@ def save_torch_sample(index, ddx, mask, pos, props, output_dir):
     torch.save({"w": ddx, "m": mask, "p": pos, "props": props}, file_path)
 
 
-def save_dataset(dataset, output_dir):
-    # Create a DataLoader
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
+def save_dataset(dataset, output_dir, num_workers=0):
+    # Create a DataLoader. num_workers parallelizes the per-sample work in
+    # __getitem__ (git-re-basin permutation + tokenization), which is the
+    # bottleneck here; the file writes themselves stay in the main process.
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=num_workers)
 
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
@@ -325,7 +327,7 @@ def preprocess_single_split(
     write_path = Path(dataset_target_path).joinpath(f"dataset_torch.{split}")
     logging.info(f"write_path: {write_path}")
 
-    save_dataset(dataset, write_path)
+    save_dataset(dataset, write_path, num_workers=num_threads)
 
     # get metadata and write to disk
     # get full sample and infer dimensions
