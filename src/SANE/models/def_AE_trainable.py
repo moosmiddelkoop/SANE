@@ -537,17 +537,35 @@ def get_transformations(config):
 def monitor_memory():
     # identify current process
     current_process = psutil.Process(os.getpid())
-    # get the current memory usage
+    # get the current host (CPU/RAM) memory usage
     mem_main = current_process.memory_info().rss
-    logging.info("memory usage - main: ", mem_main / 1024**3, "GB")
-    # get memory usage for all child processes
+    logging.info(f"memory usage - main: {mem_main / 1024**3:.2f} GB")
+    # get memory usage for all child processes (dataloader workers, etc.)
     mem_tot = mem_main
     for child in current_process.children(recursive=True):
         mem_tot += child.memory_info().rss
 
-    logging.info("memory usage - total: ", mem_tot / 1024**3, "GB")
+    logging.info(f"memory usage - total: {mem_tot / 1024**3:.2f} GB")
     out = {
         "memory_usage_main": mem_main / 1024**3,
         "memory_usage_total": mem_tot / 1024**3,
     }
+
+    # GPU VRAM: peak_reserved ~= nvidia-smi footprint (use for batch-size headroom),
+    # peak_allocated = live tensors high-water mark, allocated = current live tensors.
+    if torch.cuda.is_available():
+        gpu_alloc = torch.cuda.memory_allocated() / 1024**3
+        gpu_alloc_peak = torch.cuda.max_memory_allocated() / 1024**3
+        gpu_reserved_peak = torch.cuda.max_memory_reserved() / 1024**3
+        logging.info(
+            f"gpu vram - allocated: {gpu_alloc:.2f} GB, "
+            f"peak allocated: {gpu_alloc_peak:.2f} GB, "
+            f"peak reserved: {gpu_reserved_peak:.2f} GB"
+        )
+        out["gpu_mem_alloc_gb"] = gpu_alloc
+        out["gpu_mem_alloc_peak_gb"] = gpu_alloc_peak
+        out["gpu_mem_reserved_peak_gb"] = gpu_reserved_peak
+        # reset peak counters so each epoch's logged peak reflects that epoch only
+        torch.cuda.reset_peak_memory_stats()
+
     return out
