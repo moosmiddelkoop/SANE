@@ -179,7 +179,6 @@ error.*
 latest-run
 /tune
 
-/experiments
 # checkpoints
 *.pt
 *.json
