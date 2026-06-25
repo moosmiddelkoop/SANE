@@ -27,10 +27,14 @@ class PreprocessedSamplingDataset(Dataset):
     def collect_samples(self, datasets):
         samples = []
         for dataset in datasets:
-            for file_name in os.listdir(dataset):
-                file_path = os.path.join(dataset, file_name)
-                if os.path.isfile(file_path):
-                    samples.append(file_path)
+            # os.scandir returns dirent type info from the single directory read,
+            # so entry.is_file() avoids a separate stat() syscall per file. On GPFS
+            # this turns an O(n) metadata-bound stat-walk (slow for 100k+ samples)
+            # into a single cheap directory scan.
+            with os.scandir(dataset) as it:
+                for entry in it:
+                    if entry.is_file():
+                        samples.append(entry.path)
         return samples
 
     def __len__(self):
