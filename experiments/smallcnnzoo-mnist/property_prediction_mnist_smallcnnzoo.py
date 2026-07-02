@@ -45,9 +45,11 @@ TRIAL_DIR = Path(
     "sane_pretraining/sane_mnist_smallcnnzoo/"
     "AE_trainable_e550b_00000_0_2026-06-24_17-46-42"
 )
+OUT_DIR = Path("recall_prediction/univariate/epoch0-4-8")
+os.makedirs(OUT_DIR, exist_ok=True)
 CHECKPOINT = TRIAL_DIR / "checkpoint_000010" / "state.pt"   # latest available checkpoint
 ZOO_ROOT = Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/")
-RESULTS_JSON = "mnist_smallcnnzoo_per_class_recall.json"
+RESULTS_JSON = OUT_DIR / "mnist_smallcnnzoo_per_class_recall.json"
 
 EPOCH_LIST = [0, 4, 8]  # the only iterations with valid acc_class_* values
 ACC_CLASS_KEYS = [f"acc_class_{i}" for i in range(10)]
