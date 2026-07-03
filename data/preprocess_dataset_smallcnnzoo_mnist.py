@@ -22,6 +22,9 @@ from SANE.git_re_basin.git_re_basin import smallcnnzoo_permutation_spec
 
 logging.basicConfig(level=logging.INFO)
 
+OUT_DIR = Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist_preprocessed/")
+IN_DIR = Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/")
+
 ## to filter models by accuracy, uncomment the following lines and add the filter fn (filter_top_q) to the prep_data function
 
 # def infer_acc_threshold(root, epoch_list, quantile=0.9):
@@ -64,14 +67,12 @@ logging.basicConfig(level=logging.INFO)
 
 
 def prep_data():
-    dataset_target_path = [
-        Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist_preprocessed/"),
-    ]
+    dataset_target_path = [OUT_DIR,]
     # mkdir target path if it does not exist
     for path in dataset_target_path:
         path.mkdir(parents=True, exist_ok=True)
 
-    zoo_path = [Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/").absolute()]
+    zoo_path = [IN_DIR]
     zoo_path_and_permutation_spec_and_target_path = [
         (zoo_path[0], smallcnnzoo_permutation_spec, dataset_target_path[0]),
     ]
@@ -115,10 +116,10 @@ def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_
     tokensize = 145
 
     # permutation spec
-    permutation_number_train = 200
-    permutations_per_sample_train = 5
-    permutation_number_test = 10
-    permutations_per_sample_test = 5
+    permutation_number_train = 5
+    permutations_per_sample_train = 5 # dead parameter, only used in PermutationAugmentation, which is not used in the code
+    permutation_number_test = 5
+    permutations_per_sample_test = 5 # dead parameter, only used in PermutationAugmentation, which is not used in the code
 
     # dataset splits
     splits = ["train", "val", "test"]

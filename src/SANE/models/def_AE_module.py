@@ -250,7 +250,10 @@ class AEModule(nn.Module):
         elif config.get("optim::scheduler", None) == "OneCycleLR":
             total_steps = (
                 config.get("training::epochs_train", 150)
-                * config["training::steps_per_epoch"]
+                # set by AE_trainable at train time (= len(trainloader)); absent when
+                # building AEModule from a saved params.json for inference. The scheduler
+                # is never stepped at inference, so the default is harmless there.
+                * config.get("training::steps_per_epoch", 1)
                 * config.get("training::test_epochs", 1)
             )
             self.scheduler = torch.optim.lr_scheduler.OneCycleLR(
@@ -283,7 +286,9 @@ class AEModule(nn.Module):
         path = Path(experiment_dir).joinpath("state.pt")
         if self.distributed == False:
             state = {
-                "model": self.model.state_dict(),
+                # unwrap torch.compile() so saved keys have no `_orig_mod.` prefix
+                # and match checkpoints saved without compile (see load_model)
+                "model": getattr(self.model, "_orig_mod", self.model).state_dict(),
                 "optimizer": self.optimizer.state_dict(),
             }
             if self.scheduler is not None:
@@ -317,7 +322,12 @@ class AEModule(nn.Module):
         #     state = {"model": self.model, "optimizer": self.optimizer}
         # self.fabric.load(path, state)
         state = torch.load(path)
-        self.model.load_state_dict(state["model"])
+        # strip any `_orig_mod.` prefix left by torch.compile() so checkpoints
+        # load regardless of whether they (or the current model) were compiled
+        model_state = {
+            k.removeprefix("_orig_mod."): v for k, v in state["model"].items()
+        }
+        getattr(self.model, "_orig_mod", self.model).load_state_dict(model_state)
         if not self.reset_optimizer:
             self.optimizer.load_state_dict(state["optimizer"])
         if state.get("scheduler", None) is not None:

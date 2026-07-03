@@ -6,16 +6,18 @@ import os
 
 # Snellius A100 node: 18 CPU cores per GPU. With 8 DataLoader workers + 1 main
 # process, 2 BLAS threads each saturates the allocation without oversubscription.
-os.environ["OMP_NUM_THREADS"] = "2"
-os.environ["OPENBLAS_NUM_THREADS"] = "2"
-os.environ["MKL_NUM_THREADS"] = "2"
-os.environ["VECLIB_MAXIMUM_THREADS"] = "2"
-os.environ["NUMEXPR_NUM_THREADS"] = "2"
+# claude added this
+# os.environ["OMP_NUM_THREADS"] = "2"
+# os.environ["OPENBLAS_NUM_THREADS"] = "2"
+# os.environ["MKL_NUM_THREADS"] = "2"
+# os.environ["VECLIB_MAXIMUM_THREADS"] = "2"
+# os.environ["NUMEXPR_NUM_THREADS"] = "2"
 
 from pathlib import Path
 
 import ray
 import torch
+from ray.air.integrations.wandb import WandbLoggerCallback
 
 from SANE.models.def_AE_trainable import AE_trainable
 
@@ -37,38 +39,39 @@ def main():
     print(f"resources_per_trial: {resources_per_trial}")
 
     ### configure experiment #########
-    experiment_name = "sane_cifar10_cnn"
-    # set module parameters
+    experiment_name = "sane_mnist_smallcnnzoo"
+    # set module parameterscd 
     config = {}
     config["seed"] = 32
     config["device"] = "cuda"
     config["device_no"] = 1
     config["training::precision"] = "amp"
-    config["trainset::batchsize"] = 32
+    config["trainset::batchsize"] = 512
 
-    config["ae:transformer_type"] = "gpt2"
+    config["ae:transformer_type"] = "gpt2" # either "pytorch" or "gpt2"
     config["model::compile"] = True
 
     # permutation specs
-    config["training::permutation_number"] = 5
-    config["training::view_2_canon"] = True
-    config["testing::permutation_number"] = 5
+    config["training::permutation_number"] = 5 # any nonzero value of this behaves identically, it is only checked to be == 0 or not
+    config["training::view_1_canon"] = True
+    config["training::view_2_canon"] = False
+    config["testing::permutation_number"] = 5 # any nonzero value of this behaves identically, it is only checked to be == 0 or not
     config["testing::view_1_canon"] = True
     config["testing::view_2_canon"] = False
 
     config["training::reduction"] = "mean"
 
-    config["ae:i_dim"] = 289
+    config["ae:i_dim"] = 145
     config["ae:lat_dim"] = 128
-    config["ae:max_positions"] = [100, 10, 40]
-    config["training::windowsize"] = 93
+    config["ae:max_positions"] = [100, 10, 40] # must be bigger than [window_size, layers, max_channels/filters]
+    config["training::windowsize"] = 58
     config["ae:d_model"] = 1024
     config["ae:nhead"] = 8
     config["ae:num_layers"] = 8
 
     # configure optimizer
     config["optim::optimizer"] = "adamw"
-    config["optim::lr"] = 1e-4
+    config["optim::lr"] = 1e-4 # remember to scale with batch size
     config["optim::wd"] = 3e-9
     config["optim::scheduler"] = "OneCycleLR"
 
@@ -76,14 +79,14 @@ def main():
     config["training::temperature"] = 0.1
     config["training::gamma"] = 0.05
     config["training::reduction"] = "mean"
-    config["training::contrast"] = "simclr"
+    config["training::contrast"] = "simclr" # can only be "simclr" or "positive", for anything else it will do reconstruction only
     # AMP
     #
     config["training::epochs_train"] = 50
     config["training::output_epoch"] = 5
     config["training::test_epochs"] = 1
 
-    config["monitor_memory"] = True
+    config["monitor_memory"] = True # log memory stats
 
     # configure output path
     output_dir = PATH_ROOT.joinpath("sane_pretraining")
@@ -95,7 +98,10 @@ def main():
     ###### Datasets ###########################################################################
     # pre-compute dataset and drop in torch.save
     # data_path = output_dir.joinpath(experiment_name)
-    data_path = Path("/scratch-shared/mmiddelkoop/SANE/data/dataset_cnn_cifar10_ep10-50_std_93tok/")
+    data_path = Path(os.environ.get(
+        "SANE_DATA_DIR",
+        "/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist_preprocessed/",
+    ))
     data_path.mkdir(exist_ok=True)
     # path to ffcv dataset for training
     config["dataset::dump"] = data_path.joinpath("dataset.pt").absolute()
@@ -108,7 +114,7 @@ def main():
     config["trainloader::workers"] = 8
     config["trainset::add_noise_view_1"] = 0.1
     config["trainset::add_noise_view_2"] = 0.1
-    config["trainset::noise_multiplicative"] = True
+    config["trainset::noise_multiplicative"] = True # dead key
     config["trainset::erase_augment_view_1"] = None
     config["trainset::erase_augment_view_2"] = None
 
@@ -118,13 +124,11 @@ def main():
     context = ray.init(
         num_cpus=cpus,
         num_gpus=gpus,
-        include_dashboard=True,
-        dashboard_host="0.0.0.0",  # 0.0.0.0 is the host of the docker, (localhost is the container) (https://github.com/ray-project/ray/issues/11457#issuecomment-1325344221)
-        dashboard_port=8265,
+        include_dashboard=False,  # monitoring is via W&B; avoids port 8265 collisions on shared nodes
     )
     assert ray.is_initialized() == True
 
-    print(f"started ray. running dashboard under {context.dashboard_url}")
+    print("started ray.")
 
     experiment = ray.tune.Experiment(
         name=experiment_name,
@@ -148,6 +152,7 @@ def main():
         # resume=True,  # resumes from previous run. if run should be done all over, set resume=False
         reuse_actors=False,
         verbose=3,
+        callbacks=[WandbLoggerCallback(project="sane-mnist-smallcnnzoo")],
     )
 
     ray.shutdown()

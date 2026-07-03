@@ -1,3 +1,9 @@
+# HPC
+**/logs/
+
+# CyberDuck
+.export_done
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -15,6 +21,8 @@ __pycache__/*
 .*.swp
 */.ipynb_checkpoints/*
 .DS_Store
+/paper
+/logs
 
 # C extensions
 *.so
@@ -171,7 +179,6 @@ error.*
 latest-run
 /tune
 
-/experiments
 # checkpoints
 *.pt
 *.json

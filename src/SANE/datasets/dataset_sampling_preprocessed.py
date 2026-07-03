@@ -27,10 +27,14 @@ class PreprocessedSamplingDataset(Dataset):
     def collect_samples(self, datasets):
         samples = []
         for dataset in datasets:
-            for file_name in os.listdir(dataset):
-                file_path = os.path.join(dataset, file_name)
-                if os.path.isfile(file_path):
-                    samples.append(file_path)
+            # os.scandir returns dirent type info from the single directory read,
+            # so entry.is_file() avoids a separate stat() syscall per file. On GPFS
+            # this turns an O(n) metadata-bound stat-walk (slow for 100k+ samples)
+            # into a single cheap directory scan.
+            with os.scandir(dataset) as it:
+                for entry in it:
+                    if entry.is_file():
+                        samples.append(entry.path)
         return samples
 
     def __len__(self):
@@ -48,3 +52,27 @@ class PreprocessedSamplingDataset(Dataset):
         if self.transforms:
             ddx, mask, pos = self.transforms(ddx, mask, pos)
         return ddx, mask, pos, props
+
+
+class TensorSamplingDataset(Dataset):
+    """All samples stacked into in-RAM tensors (built by data/consolidate_preprocessed.py).
+
+    Avoids the per-sample torch.load of PreprocessedSamplingDataset, which on
+    GPFS costs one metadata-bound small-file read per sample per epoch.
+    """
+
+    def __init__(self, w, m, p, props, transforms=None):
+        self.w = w
+        self.m = m
+        self.p = p
+        self.props = props
+        self.transforms = transforms
+
+    def __len__(self):
+        return self.w.shape[0]
+
+    def __getitem__(self, idx):
+        ddx, mask, pos = self.w[idx], self.m[idx], self.p[idx]
+        if self.transforms:
+            ddx, mask, pos = self.transforms(ddx, mask, pos)
+        return ddx, mask, pos, self.props[idx]

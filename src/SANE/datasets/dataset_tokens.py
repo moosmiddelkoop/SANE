@@ -464,7 +464,7 @@ class DatasetTokens(ModelDatasetBaseEpochs):
         reference_model = self.reference_checkpoint
 
         ## init multiprocessing environment ############
-        ray.init(num_cpus=self.num_threads)
+        ray.init(num_cpus=self.num_threads, num_gpus=0)
 
         ### gather data #############################################################################################
         print(f"preparing computing canon form...")
@@ -509,7 +509,7 @@ class DatasetTokens(ModelDatasetBaseEpochs):
         data_sample = torch.stack(s1[0], s2[0])
 
         ## init multiprocessing environment ############
-        ray.init(num_cpus=self.num_threads)
+        ray.init(num_cpus=self.num_threads, num_gpus=0)
 
         ### gather data #############################################################################################
         print(f"preparing computing canon form...")
