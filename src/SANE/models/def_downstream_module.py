@@ -385,9 +385,7 @@ class DownstreamTaskLearner:
             prop_val = torch.Tensor(prop_val)
         ## find nan values
         # train
-        idx_no_nan_train = [
-            idx for idx, pdx in enumerate(prop_train.isnan()) if not pdx == True
-        ]
+        idx_no_nan_train = [idx for idx, pdx in enumerate(prop_train.isnan()) if not pdx == True]
         X_train = z_train[idx_no_nan_train]
         y_train = prop_train[idx_no_nan_train]
         if len(y_train.shape) == 2:
@@ -585,6 +583,294 @@ class DownstreamTaskLearner:
         # r2
         r2 = 1 - e_mean / e_var
         return r2.item()
+
+    ######################################################################################################################################################
+    ### multivariate ridge head (per-class recall etc.) ##################################################################################################
+    ######################################################################################################################################################
+    # Ridge is linear in the targets, so a K-output ridge with a single shared
+    # regularizer is exactly the column-stack of the K per-target scalar solutions.
+    # We keep it as one solve so the fitted coefficients B ([D+1, K]) form a single
+    # frozen linear head that can be reused/backpropagated through downstream (e.g.
+    # for weight-space surgery: y_hat = [z, 1] @ B, differentiable w.r.t. z).
+
+    def compute_r2_multivariate(
+        self, y: torch.Tensor, t: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        vectorized R^2 over multiple outputs.
+        y, t: [N, K] predictions / targets. Returns a [K] tensor of per-column R^2.
+        """
+        # per-column sum of squared errors (mean over samples)
+        e = t - y
+        sse = torch.einsum("nk,nk->k", e, e) / e.shape[0]
+        # per-column variance of the targets
+        t_mean = t.mean(dim=0, keepdim=True)
+        e_t_mean = t - t_mean
+        var = torch.einsum("nk,nk->k", e_t_mean, e_t_mean) / e_t_mean.shape[0]
+        # per-column R^2
+        r2 = 1 - sse / var
+        return r2
+
+    def solve_linear_system_multivariate(
+        self,
+        X_train: torch.Tensor,
+        Y_train: torch.Tensor,
+        X_test: torch.Tensor,
+        Y_test: torch.Tensor,
+        X_val: torch.Tensor = None,
+        Y_val: torch.Tensor = None,
+        regularization: float = 0.3,
+        return_predictions: bool = False,
+    ):
+        """
+        multivariate ridge regression: solves X B = Y for B ([D+1, K]) with a single
+        shared regularizer, via B = (X^T X + lambda I)^-1 X^T Y.
+
+        One factorization of (X^T X + lambda I) is reused across the K target columns.
+        Returns the fitted coefficients B (the frozen head) alongside per-column R^2.
+        """
+        # send to device
+        X_train = X_train.to(self.device)
+        Y_train = Y_train.to(self.device)
+        X_test = X_test.to(self.device)
+        Y_test = Y_test.to(self.device)
+        if X_val is not None:
+            X_val = X_val.to(self.device)
+            Y_val = Y_val.to(self.device)
+
+        # append column of ones -> bias / offset
+        X_train = torch.cat(
+            [X_train, torch.ones(X_train.shape[0], 1).to(self.device)], dim=1
+        )
+        X_test = torch.cat(
+            [X_test, torch.ones(X_test.shape[0], 1).to(self.device)], dim=1
+        )
+        if X_val is not None:
+            X_val = torch.cat(
+                [X_val, torch.ones(X_val.shape[0], 1).to(self.device)], dim=1
+            )
+
+        # cast tensors to double
+        X_train = X_train.double()
+        Y_train = Y_train.double()
+        X_test = X_test.double()
+        Y_test = Y_test.double()
+        if X_val is not None:
+            X_val = X_val.double()
+            Y_val = Y_val.double()
+
+        # A = X^T X + lambda I  ([D+1, D+1]);  RHS = X^T Y  ([D+1, K])
+        X_t_X_train = torch.einsum("ni,nj->ij", X_train, X_train)
+        A = X_t_X_train + regularization * torch.eye(X_t_X_train.shape[0]).to(
+            self.device
+        )
+        X_t_Y_train = torch.einsum("ni,nk->ik", X_train, Y_train)
+        # single factorization, K right-hand sides
+        B = torch.linalg.solve(A, X_t_Y_train)
+
+        # predictions
+        Y_train_pred = X_train @ B
+        Y_test_pred = X_test @ B
+        r2_train = self.compute_r2_multivariate(Y_train_pred, Y_train)
+        r2_test = self.compute_r2_multivariate(Y_test_pred, Y_test)
+        if X_val is not None:
+            Y_val_pred = X_val @ B
+            r2_val = self.compute_r2_multivariate(Y_val_pred, Y_val)
+        else:
+            Y_val_pred = None
+            r2_val = None
+
+        if return_predictions:
+            return B, Y_train_pred, Y_test_pred, Y_val_pred, r2_train, r2_test, r2_val
+        return B, r2_train, r2_test, r2_val
+
+    def compute_closed_form_solution_multivariate(
+        self,
+        z_train: torch.Tensor,
+        Y_train,
+        z_test: torch.Tensor,
+        Y_test,
+        z_val: torch.Tensor = None,
+        Y_val=None,
+        verbosity: int = 0,
+    ):
+        """
+        fits the multivariate ridge head, selecting a single shared regularizer by
+        best mean validation R^2 across the K outputs (falls back to mean train R^2
+        when no valset is given). Rows containing any NaN target are dropped.
+
+        Returns dict with the fitted head B, the chosen regularizer, and per-column
+        R^2 for train/test/(val).
+        """
+        # cast targets to tensors
+        Y_train = torch.as_tensor(Y_train, dtype=torch.float)
+        Y_test = torch.as_tensor(Y_test, dtype=torch.float)
+        if Y_val is not None:
+            Y_val = torch.as_tensor(Y_val, dtype=torch.float)
+
+        # drop rows with any NaN target (single shared head -> whole-row drop)
+        def _drop_nan_rows(z, Y):
+            if Y is None:
+                return z, Y
+            keep = ~torch.isnan(Y).any(dim=1)
+            return z[keep], Y[keep]
+
+        z_train, Y_train = _drop_nan_rows(z_train, Y_train)
+        z_test, Y_test = _drop_nan_rows(z_test, Y_test)
+        if z_val is not None:
+            z_val, Y_val = _drop_nan_rows(z_val, Y_val)
+
+        # same regularization sweep as the scalar closed-form solver
+        reg_list = [
+            1e3,
+            3e2,
+            1e2,
+            3e1,
+            1e1,
+            3e0,
+            1e0,
+            3e-1,
+            1e-1,
+            3e-2,
+            1e-2,
+            3e-3,
+            1e-3,
+            3e-4,
+            1e-4,
+            3e-5,
+            1e-5,
+        ]
+        mean_r2_train = []
+        mean_r2_val = []
+        for reg in reg_list:
+            _, r2_tr, _, r2_va = self.solve_linear_system_multivariate(
+                X_train=z_train,
+                Y_train=Y_train,
+                X_test=z_test,
+                Y_test=Y_test,
+                X_val=z_val if z_val is not None else None,
+                Y_val=Y_val if Y_val is not None else None,
+                regularization=reg,
+            )
+            mean_r2_train.append(r2_tr.mean().item())
+            mean_r2_val.append(r2_va.mean().item() if r2_va is not None else None)
+
+        # pick single shared regularizer by mean R^2 across outputs
+        if z_val is not None:
+            index_best = int(np.argmax(mean_r2_val))
+        else:
+            index_best = int(np.argmax(mean_r2_train))
+        reg_best = reg_list[index_best]
+        if verbosity > 0:
+            print(f"best regularization : {reg_best}")
+
+        # refit at best regularizer to recover the head B and per-column R^2
+        B, r2_train, r2_test, r2_val = self.solve_linear_system_multivariate(
+            X_train=z_train,
+            Y_train=Y_train,
+            X_test=z_test,
+            Y_test=Y_test,
+            X_val=z_val if z_val is not None else None,
+            Y_val=Y_val if Y_val is not None else None,
+            regularization=reg_best,
+        )
+        return {
+            "B": B,
+            "reg_best": reg_best,
+            "r2_train": r2_train,
+            "r2_test": r2_test,
+            "r2_val": r2_val,
+        }
+
+    def _stack_target_columns(self, dataset, target_keys) -> torch.Tensor:
+        """
+        stacks the given property keys into a [N, K] target matrix, flattening over
+        [model][epoch] in the same order as dataset.__get_weights__() flattens the
+        weights (so rows align with the embeddings).
+        """
+        cols = []
+        for key in target_keys:
+            try:
+                _ = dataset.epochs  # nested [model][epoch] properties
+                col = [
+                    dataset.properties[key][idx][jdx]
+                    for idx in range(len(dataset.properties[key]))
+                    for jdx in range(len(dataset.properties[key][idx]))
+                ]
+            except Exception:
+                col = [
+                    dataset.properties[key][idx]
+                    for idx in range(len(dataset.properties[key]))
+                ]
+            cols.append(torch.tensor(col, dtype=torch.float))
+        return torch.stack(cols, dim=1)
+
+    def eval_multivariate_regression(
+        self,
+        model,
+        trainset,
+        testset,
+        valset=None,
+        target_keys: list = None,
+        batch_size: int = 100,
+        sentinel: float = -999.0,
+    ):
+        """
+        end-to-end multivariate regression head (e.g. per-class recall): encodes the
+        weight tokens once, stacks the target_keys into a [N, K] target matrix,
+        converts the `sentinel` value to NaN, and fits the shared-lambda ridge head.
+
+        Returns the dict from compute_closed_form_solution_multivariate, augmented
+        with target_keys and mean R^2 per split.
+        """
+        assert target_keys is not None, "target_keys must be provided"
+        self.polar_coordinates = False
+        self.device = (
+            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        )
+
+        # ---- embeddings (same pos handling as eval_dstasks) ----
+        def _embed(dataset):
+            w, _ = dataset.__get_weights__()
+            try:
+                pos = torch.stack(dataset.pos)
+            except Exception:
+                pos = repeat(dataset.positions, "n d -> b n d", b=w.shape[0])
+            return self.map_embeddings(
+                weights=w, pos=pos, model=model, batch_size=batch_size
+            )
+
+        print("Prepare embeddings")
+        z_train = _embed(trainset)
+        z_test = _embed(testset)
+        z_val = _embed(valset) if valset is not None else None
+
+        # ---- targets [N, K] with sentinel -> NaN ----
+        def _targets(dataset):
+            if dataset is None:
+                return None
+            Y = self._stack_target_columns(dataset, target_keys)
+            return torch.where(Y == sentinel, torch.full_like(Y, float("nan")), Y)
+
+        Y_train = _targets(trainset)
+        Y_test = _targets(testset)
+        Y_val = _targets(valset)
+
+        logging.info("Fit multivariate ridge head")
+        result = self.compute_closed_form_solution_multivariate(
+            z_train=z_train,
+            Y_train=Y_train,
+            z_test=z_test,
+            Y_test=Y_test,
+            z_val=z_val if z_val is not None else None,
+            Y_val=Y_val if Y_val is not None else None,
+        )
+        result["target_keys"] = list(target_keys)
+        result["mean_r2_train"] = result["r2_train"].mean().item()
+        result["mean_r2_test"] = result["r2_test"].mean().item()
+        if result["r2_val"] is not None:
+            result["mean_r2_val"] = result["r2_val"].mean().item()
+        return result
 
     def eval_ood_dstask(
         self,

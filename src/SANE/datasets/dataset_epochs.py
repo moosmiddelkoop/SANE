@@ -150,7 +150,7 @@ class ModelDatasetBaseEpochs(Dataset):
         epochs = []
 
         ## init multiprocessing environment ############
-        ray.init(num_cpus=num_threads)
+        ray.init(num_cpus=num_threads, num_gpus=0)
 
         ### gather data #############################################################################################
         logging.info(f"loading checkpoints from {self.root}")

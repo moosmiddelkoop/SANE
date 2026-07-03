@@ -52,3 +52,27 @@ class PreprocessedSamplingDataset(Dataset):
         if self.transforms:
             ddx, mask, pos = self.transforms(ddx, mask, pos)
         return ddx, mask, pos, props
+
+
+class TensorSamplingDataset(Dataset):
+    """All samples stacked into in-RAM tensors (built by data/consolidate_preprocessed.py).
+
+    Avoids the per-sample torch.load of PreprocessedSamplingDataset, which on
+    GPFS costs one metadata-bound small-file read per sample per epoch.
+    """
+
+    def __init__(self, w, m, p, props, transforms=None):
+        self.w = w
+        self.m = m
+        self.p = p
+        self.props = props
+        self.transforms = transforms
+
+    def __len__(self):
+        return self.w.shape[0]
+
+    def __getitem__(self, idx):
+        ddx, mask, pos = self.w[idx], self.m[idx], self.p[idx]
+        if self.transforms:
+            ddx, mask, pos = self.transforms(ddx, mask, pos)
+        return ddx, mask, pos, self.props[idx]

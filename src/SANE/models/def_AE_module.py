@@ -250,7 +250,10 @@ class AEModule(nn.Module):
         elif config.get("optim::scheduler", None) == "OneCycleLR":
             total_steps = (
                 config.get("training::epochs_train", 150)
-                * config["training::steps_per_epoch"]
+                # set by AE_trainable at train time (= len(trainloader)); absent when
+                # building AEModule from a saved params.json for inference. The scheduler
+                # is never stepped at inference, so the default is harmless there.
+                * config.get("training::steps_per_epoch", 1)
                 * config.get("training::test_epochs", 1)
             )
             self.scheduler = torch.optim.lr_scheduler.OneCycleLR(

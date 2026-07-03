@@ -2,6 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## General rules
+BE MINIMALIST. I like the code to be as lightweight as possible
+
 ## Project
 
 SANE (Sequential Autoencoder for Neural Embeddings) — research code for the ICML 2024 paper "Towards Scalable and Versatile Weight Space Learning". The package learns task-agnostic representations of neural network *weights* by tokenizing model weights and training a transformer autoencoder over those token sequences. Downstream uses: predicting model properties (test_acc, ggap, epoch) and generating/finetuning new models from sampled embeddings.
