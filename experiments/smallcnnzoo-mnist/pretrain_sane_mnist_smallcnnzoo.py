@@ -7,11 +7,11 @@ import os
 # Snellius A100 node: 18 CPU cores per GPU. With 8 DataLoader workers + 1 main
 # process, 2 BLAS threads each saturates the allocation without oversubscription.
 # claude added this
-os.environ["OMP_NUM_THREADS"] = "2"
-os.environ["OPENBLAS_NUM_THREADS"] = "2"
-os.environ["MKL_NUM_THREADS"] = "2"
-os.environ["VECLIB_MAXIMUM_THREADS"] = "2"
-os.environ["NUMEXPR_NUM_THREADS"] = "2"
+# os.environ["OMP_NUM_THREADS"] = "2"
+# os.environ["OPENBLAS_NUM_THREADS"] = "2"
+# os.environ["MKL_NUM_THREADS"] = "2"
+# os.environ["VECLIB_MAXIMUM_THREADS"] = "2"
+# os.environ["NUMEXPR_NUM_THREADS"] = "2"
 
 from pathlib import Path
 
@@ -98,7 +98,10 @@ def main():
     ###### Datasets ###########################################################################
     # pre-compute dataset and drop in torch.save
     # data_path = output_dir.joinpath(experiment_name)
-    data_path = Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist_preprocessed/")
+    data_path = Path(os.environ.get(
+        "SANE_DATA_DIR",
+        "/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist_preprocessed/",
+    ))
     data_path.mkdir(exist_ok=True)
     # path to ffcv dataset for training
     config["dataset::dump"] = data_path.joinpath("dataset.pt").absolute()
