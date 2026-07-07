@@ -13,6 +13,7 @@ import os
 # os.environ["VECLIB_MAXIMUM_THREADS"] = "2"
 # os.environ["NUMEXPR_NUM_THREADS"] = "2"
 
+from datetime import datetime
 from pathlib import Path
 
 import ray
@@ -21,8 +22,10 @@ from ray.air.integrations.wandb import WandbLoggerCallback
 
 from SANE.models.def_AE_trainable import AE_trainable
 
-PATH_ROOT = Path("./")
-
+OUTPUT_PATH = Path("/projects/prjs2156/shared/wsl/metanets/sane_pretraining")
+# short, informative human-readable tag for this launch: names the trial dir and the W&B run
+# (the trial_id suffix keeps names unique across launches)
+RUN_TAG = "gradient-clip-2.0"
 
 def main():
     ### set experiment resources ####
@@ -40,6 +43,7 @@ def main():
 
     ### configure experiment #########
     experiment_name = "sane_mnist_smallcnnzoo"
+
     # set module parameterscd 
     config = {}
     config["seed"] = 32
@@ -74,6 +78,10 @@ def main():
     config["optim::lr"] = 1e-4 # remember to scale with batch size
     config["optim::wd"] = 3e-9
     config["optim::scheduler"] = "OneCycleLR"
+    # clip gradients: run c898d spiked at ~0.9x max LR (epoch 23) and re-converged
+    # in a rescaled latent regime; see TODO.md
+    config["training::gradient_clipping"] = "norm"
+    config["training::gradient_clipp_value"] = 1.0
 
     # training config
     config["training::temperature"] = 0.1
@@ -84,12 +92,18 @@ def main():
     #
     config["training::epochs_train"] = 50
     config["training::output_epoch"] = 5
+    # training::test_epochs also influences how frequently results are logged! AE_trainable.step() runs this 
+    # amount of training epochs, and then one val/test epoch per step, and ray only updates the results after 
+    # each .step() call. If this value is larger than 1, the reported _train metrics are from the _last_ epoch 
+    # in the inner loop
     config["training::test_epochs"] = 1
+    # development phase: monitor on the val split only, hold out the test split for final evals
+    config["training::eval_testset"] = False
 
     config["monitor_memory"] = True # log memory stats
 
     # configure output path
-    output_dir = PATH_ROOT.joinpath("sane_pretraining")
+    output_dir = OUTPUT_PATH
     try:
         output_dir.mkdir(parents=True, exist_ok=False)
     except FileExistsError:
@@ -144,6 +158,10 @@ def main():
         config=config,
         local_dir=output_dir,
         resources_per_trial=resources_per_trial,
+        trial_name_creator=lambda trial: f"{RUN_TAG}_{trial.trial_id}",
+        # date suffix (same format as ray's default dirname) makes chronological ordering explicit
+        trial_dirname_creator=lambda trial: f"{RUN_TAG}_{trial.trial_id}_"
+        + datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
     )
     # run
     ray.tune.run_experiments(
