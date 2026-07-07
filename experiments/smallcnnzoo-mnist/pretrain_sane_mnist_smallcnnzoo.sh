@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=pretrain_sane_mnist_smallcnnzoo_clipping_test
+#SBATCH --job-name=pretrain_sane_mnist_smallcnnzoo_clipping_test-2
 #SBATCH --partition=gpu_a100
 #SBATCH --gpus=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
 #SBATCH --time=6:00:00
-#SBATCH --output=logs/pretrain_sane_mnist_smallcnnzoo_clipping_test_%j.out
+#SBATCH --output=logs/pretrain_sane_mnist_smallcnnzoo_clipping_test-2_%j.out
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=moos@cwi.nl
 
