@@ -200,10 +200,13 @@ class AE_trainable(Trainable):
             result_dict[f"{key}_train"] = perf_train[key]
 
         # TEST EPOCH
-        perf_test = self.module.test_epoch(self.testloader)
-        # collect metrics
-        for key in perf_test.keys():
-            result_dict[f"{key}_test"] = perf_test[key]
+        # gated off during development so run comparison / checkpoint selection
+        # can't accidentally happen on the test split
+        if self.config.get("training::eval_testset", True):
+            perf_test = self.module.test_epoch(self.testloader)
+            # collect metrics
+            for key in perf_test.keys():
+                result_dict[f"{key}_test"] = perf_test[key]
 
         # VALIDATION EPOCH
         if self.valloader is not None:

@@ -2,6 +2,7 @@ import inspect
 import logging
 import os
 import random
+import statistics
 from pathlib import Path
 
 import numpy as np
@@ -88,6 +89,10 @@ class AEModule(nn.Module):
         if self.use_amp:
             print("++++++ USE AUTOMATIC MIXED PRECISION +++++++")
             self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+        # steps skipped by the scaler on inf/nan gradients (see train_step)
+        self.skipped_steps = 0
+        # finite pre-clip gradient norms of the current epoch (only filled in "norm" clipping mode)
+        self.pre_clip_norms = []
 
         # init gradien clipping
         if config.get("training::gradient_clipping", None) == "norm":
@@ -112,7 +117,10 @@ class AEModule(nn.Module):
     ):
         # print(f"clip grads by norm")
         # nn.utils.clip_grad_norm_(self.params, self.clipping_value)
-        nn.utils.clip_grad_norm_(self.parameters(), self.clipping_value)
+        norm = nn.utils.clip_grad_norm_(self.parameters(), self.clipping_value)
+        # inf/nan norms are skipped steps, tracked separately via skipped_steps
+        if torch.isfinite(norm):
+            self.pre_clip_norms.append(norm.item())
 
     def clip_grad_value(
         self,
@@ -378,9 +386,12 @@ class AEModule(nn.Module):
             # Since the gradients of optimizer's assigned params are now unscaled, clips as usual.
             self.clip_grads()
         # update parameters
-        self.scaler.step(self.optimizer)
+        scale_before = self.scaler.get_scale()
+        self.scaler.step(self.optimizer) # invokes scaler._unscale and updates parameters,. unless scaler._unscale was already explicitly called
         # update scaler
         self.scaler.update()
+        # the scale only decreases when step() found inf/nan grads and was skipped
+        self.skipped_steps += int(self.scaler.get_scale() < scale_before)
         # update scheduler
         if self.scheduler is not None:
             self.scheduler.step()
@@ -404,6 +415,8 @@ class AEModule(nn.Module):
         # init accumulated loss, accuracy
         perf_out = {}
         n_data = 0
+        skips_start = self.skipped_steps
+        self.pre_clip_norms = []
 
         # set epoch for distributed sampler
         if self.distributed == "ddp":
@@ -457,6 +470,16 @@ class AEModule(nn.Module):
             perf_out[key] /= n_data
             if torch.is_tensor(perf_out[key]):
                 perf_out[key] = perf_out[key].item()
+        # steps skipped by the amp scaler this epoch (added after normalization: it's a count, not a mean)
+        perf_out["debug/skipped_steps"] = self.skipped_steps - skips_start
+        # pre-clip gradient norm stats (norm-clipping mode only); median over max/mean
+        # because a few near-overflow steps would dominate the mean
+        if self.pre_clip_norms:
+            perf_out["debug/clipped_steps"] = sum(
+                n > self.clipping_value for n in self.pre_clip_norms
+            )
+            perf_out["debug/pre_clip_norm_max"] = max(self.pre_clip_norms)
+            perf_out["debug/pre_clip_norm_median"] = statistics.median(self.pre_clip_norms)
 
         return perf_out
 
