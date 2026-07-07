@@ -9,8 +9,10 @@
 
 ## Plan
 
-1. **Quantify the damage**: encode the same checkpoints with pre-spike `checkpoint_000020` and the final checkpoint; compare downstream property-prediction R² and the eigenspectrum / effective rank of the embeddings.
-2. **Prevent recurrence**: set `config["training::gradient_clipping"] = "norm"` (`training::gradient_clipp_value` ~1–5) in the pretrain script — the hook exists in `AEModule` but is off by default.
+1. ~~**Quantify the damage**~~ DONE (job 24479666, `experiments/smallcnnzoo-mnist/spike_damage/compare_spike_checkpoints.json`):
+   ckpt20 → ckpt50: recall mean R² 0.800 → **0.847**, test_acc R² 0.920 → **0.957**, effective rank 14.4 → **5.4**.
+   The spike concentrated the embedding geometry (~3× lower rank) but did **not** hurt property prediction — final checkpoint is strictly better; use it. Open question for the surgery work: does the ~5-dim effective subspace constrain edit directions / the trust region?
+2. ~~**Prevent recurrence**~~ DONE: clipping enabled in the pretrain script (norm, 1.0); AMP-skip forensics confirmed 8 skipped steps in epochs 20–25 (0 elsewhere) via AdamW-vs-scheduler step counts. Also added per-epoch `debug/skipped_steps`, `debug/clipped_steps`, `debug/pre_clip_norm_{max,median}` metrics.
 3. If spikes persist: lower `optim::lr` slightly or increase warmup (`pct_start`).
 4. Consider anchoring the latent scale explicitly (small `training::z_norm_penalty`, or normalizing embeddings before the decoder) so an instability can't silently re-roll the latent geometry mid-run.
-5. Record the conclusion in the W&B run notes for `c898d_00000`.
+5. ~~Record the conclusion in the W&B run notes~~ DONE: https://wandb.ai/moos-vu/sane-mnist-smallcnnzoo/runs/c898d_00000
