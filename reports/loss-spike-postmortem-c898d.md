@@ -52,7 +52,8 @@ confound the comparison), encode with pre-spike `checkpoint_000020` and final
 ## Conclusions
 
 - **The spike did not hurt downstream quality.** The final checkpoint is strictly better on
-  recall/test_acc R² and matches the paper's raw-weight MLP baseline (~0.842). Use
+  recall/test_acc R², and beats the e550b encoder on the identical `[0,4,8]` task
+  (0.8474 vs 0.8420 ± 0.0022 over 10 resplits, from `recall_prediction/r2_spread/`). Use
   `checkpoint_000050` for downstream work.
 - **Both TODO hypotheses were true simultaneously**: the latent geometry did permanently
   concentrate (~3× lower effective rank; 92% of variance in 5 of 128 directions), *and* it was
