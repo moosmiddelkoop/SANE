@@ -41,7 +41,7 @@ logging.basicConfig(level=logging.INFO)
 # Paths / config
 # ---------------------------------------------------------------------------
 TRIAL_DIR = Path(
-    "sane_pretraining/sane_mnist_smallcnnzoo/"
+    "/projects/prjs2156/shared/wsl/metanets/sane_pretraining/sane_mnist_smallcnnzoo/"
     "AE_trainable_c898d_00000_0_2026-07-02_18-12-12"
 )
 CHECKPOINTS = {
@@ -51,9 +51,13 @@ CHECKPOINTS = {
 ZOO_ROOT = Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/")
 OUT_DIR = Path("spike_damage")
 os.makedirs(OUT_DIR, exist_ok=True)
-RESULTS_JSON = OUT_DIR / "compare_spike_checkpoints.json"
 
 EPOCH_LIST = [0, 4, 8]
+_label = "-".join(str(e) for e in EPOCH_LIST)
+RESULTS_JSON = OUT_DIR / f"compare_spike_checkpoints_{_label}.json"
+# embeddings + targets, so future epoch-subset / target refits are a ridge solve
+# instead of an hour of re-encoding
+EMBEDDINGS_PT = OUT_DIR / f"embeddings_{_label}.pt"
 ACC_CLASS_KEYS = [f"acc_class_{i}" for i in range(10)]
 SCALAR_KEYS = ["test_acc", "training_iteration"]
 SENTINEL = -999.0
@@ -144,6 +148,11 @@ results = {
     "target_keys": ACC_CLASS_KEYS + SCALAR_KEYS,
     "checkpoints": {},
 }
+z_store = {
+    "epoch_list": EPOCH_LIST,
+    "targets": {s: {"recall_Y": splits[s]["Y"], **splits[s]["scalars"]} for s in splits},
+    "z": {},
+}
 for name, ckpt_path in CHECKPOINTS.items():
     logging.info(f"=== checkpoint {name}: {ckpt_path} ===")
     checkpoint = torch.load(ckpt_path, map_location=device)
@@ -174,8 +183,18 @@ for name, ckpt_path in CHECKPOINTS.items():
         zip(ACC_CLASS_KEYS, [r.item() for r in res["r2_test"]])
     )
     entry["recall_mean_r2_test"] = res["r2_test"].mean().item()
+    # MSE = (1 - R^2) * Var(Y_test), matching compute_r2_multivariate exactly
+    Y_test = splits["test"]["Y"]
+    Y_test = Y_test[~torch.isnan(Y_test).any(dim=1)]
+    mse_test = (1 - res["r2_test"]) * Y_test.var(dim=0, unbiased=False)
+    entry["recall_mse_test"] = dict(zip(ACC_CLASS_KEYS, mse_test.tolist()))
+    entry["recall_mean_mse_test"] = mse_test.mean().item()
 
     for key in SCALAR_KEYS:
+        # constant targets (e.g. training_iteration with a single-epoch list) make R^2 undefined
+        if splits["train"]["scalars"][key].std() < 1e-8:
+            logging.info(f"Skip scalar ridge for {key}: zero variance")
+            continue
         logging.info(f"Fit scalar ridge for {key}")
         r2_train, r2_test, r2_val = dstk.compute_closed_form_solution(
             z_train=z["train"],
@@ -198,8 +217,9 @@ for name, ckpt_path in CHECKPOINTS.items():
     # persist after every checkpoint so partial results survive a crash
     with open(RESULTS_JSON, "w") as f:
         json.dump(results, f, indent=4)
+    z_store["z"][name] = z
+    torch.save(z_store, EMBEDDINGS_PT)
 
-    del z
     gc.collect()
 
 logging.info(f"Wrote results to {RESULTS_JSON}")
