@@ -78,8 +78,7 @@ def main():
     config["optim::lr"] = 1e-4 # remember to scale with batch size
     config["optim::wd"] = 3e-9
     config["optim::scheduler"] = "OneCycleLR"
-    # clip gradients: run c898d spiked at ~0.9x max LR (epoch 23) and re-converged
-    # in a rescaled latent regime; see TODO.md
+    # clip gradients
     config["training::gradient_clipping"] = "norm"
     config["training::gradient_clipp_value"] = 2.0
 
