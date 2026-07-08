@@ -81,7 +81,7 @@ def main():
     # clip gradients: run c898d spiked at ~0.9x max LR (epoch 23) and re-converged
     # in a rescaled latent regime; see TODO.md
     config["training::gradient_clipping"] = "norm"
-    config["training::gradient_clipp_value"] = 1.0
+    config["training::gradient_clipp_value"] = 2.0
 
     # training config
     config["training::temperature"] = 0.1
