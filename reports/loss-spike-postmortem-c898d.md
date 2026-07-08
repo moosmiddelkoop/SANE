@@ -1,6 +1,7 @@
 # Loss spike postmortem — run c898d (smallcnnzoo-mnist pretraining)
 
-*2026-07-07 — run `c898d_00000` (job 24380274, 2026-07-02); quantification job 24479666.
+*2026-07-07 — run `c898d_00000` (job 24380274, 2026-07-02); quantification jobs 24479666
+(`[0,4,8]`) and 24485628 (`[8]`-only).
 W&B notes: https://wandb.ai/moos-vu/sane-mnist-smallcnnzoo/runs/c898d_00000*
 
 ## What happened
@@ -35,38 +36,59 @@ to the new regime. (Skipped steps also don't pause the scheduler: the LR marched
 Method (`experiments/smallcnnzoo-mnist/compare_spike_checkpoints.py`): build the `[0,4,8]`
 DatasetTokens splits **once** (canonicalization is stochastic — rebuilding per checkpoint would
 confound the comparison), encode with pre-spike `checkpoint_000020` and final
-`checkpoint_000050`, fit identical ridge heads, compare embedding spectra. Results
-(`spike_damage/compare_spike_checkpoints.json`):
+`checkpoint_000050`, fit identical ridge heads, compare embedding spectra. Results in
+`spike_damage/compare_spike_checkpoints.json`; the `[8]`-only run is
+`compare_spike_checkpoints_ep8.py` → `compare_spike_checkpoints_8.json`:
 
 | metric (test split) | ckpt 20 (pre-spike) | ckpt 50 (final) |
 |---|---|---|
-| per-class recall, mean R² | 0.800 | **0.847** |
-| test_acc R² | 0.920 | **0.957** |
-| training_iteration R² | 0.672 | 0.672 |
-| effective rank (128-dim z) | 14.4 | **5.4** |
-| top-5 eigenvalue share | 0.62 | 0.92 |
-| z_norm / z_var (sample-level)* | 30.6 / 6.48 | 42.0 / 3.62 |
+| `[0,4,8]` per-class recall, mean R² | 0.800 | **0.847** |
+| `[0,4,8]` test_acc R² | 0.920 | **0.957** |
+| `[0,4,8]` training_iteration R² | 0.672 | 0.672 |
+| `[0,4,8]` effective rank (128-dim z) | 14.4 | **5.4** |
+| `[8]`-only per-class recall, mean R² | **0.823** | 0.800 |
+| `[8]`-only test_acc R² | 0.929 | 0.924 |
+| `[8]`-only effective rank | 11.8 | **4.8** |
 
-*Pooled sample embeddings — not comparable to the token-level `debug/z_norm` training metric.
+e550b anchors (10 resplits, `recall_prediction/r2_spread/`): 0.8420 ± 0.0022 on `[0,4,8]`,
+0.8407 ± 0.0044 on `[8]`. Embeddings for refits: `spike_damage/embeddings_8.pt`.
+
+Per-class detail on `[8]`: the gap is not a class-1 artifact — class 1 recall is near-ceiling
+at epoch 8 (mean 0.967; target variance ~9% of other classes', with 92% of models ≥0.95 and a
+3% failure tail carrying 96% of the variance), so its R² is low for *any* encoder — e550b
+shows the same drop (0.76 on `[0,4,8]` → 0.31 on `[8]`, `r2_spread.json`). Excluding it the
+gap persists (0.891 vs 0.871). Seven of ten classes degrade, dominated by class 5
+(0.887 → 0.774); classes 2/4/7/8 each lose 0.02–0.03. The spectra tell the same story:
+top-5 eigenvalue share 0.69 → 0.93, and the best ridge penalty jumps 1 → 10 — the collapsed
+embedding needs 10× stronger regularization to generalize.
 
 ## Conclusions
 
-- **The spike did not hurt downstream quality.** The final checkpoint is strictly better on
-  recall/test_acc R², and beats the e550b encoder on the identical `[0,4,8]` task
-  (0.8474 vs 0.8420 ± 0.0022 over 10 resplits, from `recall_prediction/r2_spread/`). Use
-  `checkpoint_000050` for downstream work.
-- **Both TODO hypotheses were true simultaneously**: the latent geometry did permanently
-  concentrate (~3× lower effective rank; 92% of variance in 5 of 128 directions), *and* it was
-  benign for linear property prediction — 30 extra epochs more than paid for it.
+- **The damage is task-dependent.** On the trajectory-spanning `[0,4,8]` task the final
+  checkpoint is strictly better (0.847 vs 0.800, and above the e550b anchor 0.842). But
+  restricted to **converged checkpoints only** (`[8]`), the ranking flips: pre-spike 0.823 vs
+  final **0.800**, with both below the e550b anchor (0.841). The rank-collapsed final encoder
+  resolves coarse trajectory position extremely well but lost fine-grained discrimination
+  *among converged models* — which is precisely the population the surgery work edits.
+- **Both TODO hypotheses were true simultaneously**: the latent geometry permanently
+  concentrated (effective rank 14.4 → 5.4 pooled, 11.8 → 4.8 converged-only; ~92% of variance
+  in 5 of 128 directions), and whether that is benign depends on the downstream task's need
+  for within-converged-population resolution.
+- Checkpoint choice: `checkpoint_000050` for trajectory-wide tasks; for converged-only work
+  `checkpoint_000020` is better — but the clean clipped rerun (`gradient-clip-2.0_7a92c`,
+  no spike, healthy z_var) should be evaluated next and likely supersedes both.
 
 ## Implications for the trust region / surgery work
 
 - The final encoder packs its predictive information into a ~5-dimensional effective subspace.
-  Ridge regression doesn't care, but weight-space editing might: gradients backpropagated
-  through the encoder are largely confined to that subspace, which could limit the expressible
-  edit directions (can a *class-selective* forgetting direction be represented in 5 effective
-  dims?) or, conversely, act as a regularizer that keeps edits on-manifold and faithful longer.
-  Direction unknown — treat as an open empirical question.
+  The `[8]`-only result gives the first evidence this is costly where it matters: reduced
+  resolution among converged models — the population Algorithm 1 edits. Gradients
+  backpropagated through the encoder are largely confined to that subspace, which may limit
+  the expressible edit directions (can a *class-selective* forgetting direction be represented
+  in 5 effective dims?). Suggestively, the resolution loss is itself class-selective — class 5
+  recall R² dropped 0.11 while classes 0/6/9 were untouched — i.e. some per-class directions
+  survived the collapse and others didn't. The regularizer-that-keeps-edits-faithful
+  counter-hypothesis remains untested.
 - Natural controlled experiment: run the edit loop with ckpt20 (erank 14.4) vs ckpt50
   (erank 5.4) as the encoder — same run, same data, different geometry — and compare
   steps-until-unfaithfulness and forget/retain endpoints.
