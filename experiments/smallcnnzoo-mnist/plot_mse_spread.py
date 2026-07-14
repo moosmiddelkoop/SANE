@@ -84,6 +84,8 @@ def plot_metric(metric, ylabel):
     ax.set_xticks(x)
     ax.set_xticklabels(["{" + l.replace("-", ", ") + "}" for l in labels])
     ax.set_xlim(-0.15, len(labels) - 1 + 0.35)
+    if metric == "mse_test":
+        ax.set_ylim(0, 0.1) 
     ax.set_xlabel("epoch set used for encoding", color=INK)
     ax.set_ylabel(ylabel, color=INK)
     ax.set_title(

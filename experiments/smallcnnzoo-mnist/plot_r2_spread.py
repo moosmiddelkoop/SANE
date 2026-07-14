@@ -11,7 +11,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-RESULTS_JSON = Path("recall_prediction/r2_spread/r2_spread.json")
+RESULTS_JSON = Path("recall_prediction/mse_spread/mse_spread.json")
 OUT_STEM = RESULTS_JSON.parent / "r2_spread"
 
 # CVD-validated 10-slot categorical palette (classes 0..9)
@@ -68,6 +68,7 @@ ax.set_xticks(x)
 ax.set_xticklabels(["{" + l.replace("-", ", ") + "}" for l in labels])
 ax.set_xlim(-0.15, len(labels) - 1 + 0.35)
 ax.set_xlabel("epoch set used for encoding", color=INK)
+ax.set_ylim(0, 1.0)
 ax.set_ylabel("test $R^2$ (per-class recall)", color=INK)
 ax.set_title(
     "Per-class recall prediction from SANE embeddings\n"
@@ -75,6 +76,7 @@ ax.set_title(
     color=INK,
     fontsize=11,
 )
+ax.set_yticks(np.arange(0, 1.1, 0.1))
 ax.grid(axis="y", color=GRID, lw=0.8)
 ax.set_axisbelow(True)
 for spine in ["top", "right"]:
