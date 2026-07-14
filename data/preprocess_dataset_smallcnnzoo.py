@@ -2,6 +2,8 @@
 import logging
 import os
 
+from argparse import ArgumentParser
+
 # Single-threaded BLAS per worker: preprocessing parallelizes across CPUs via Ray
 # (many lightweight checkpoint-loading workers), so multi-threaded BLAS would
 # oversubscribe cores without helping the tiny per-model tensor ops. Must be set
@@ -22,54 +24,13 @@ logging.basicConfig(level=logging.INFO)
 OUT_DIR = Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist_preprocessed/")
 IN_DIR = Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/")
 
-## to filter models by accuracy, uncomment the following lines and add the filter fn (filter_top_q) to the prep_data function
-
-# def infer_acc_threshold(root, epoch_list, quantile=0.9):
-#     logging.info("Inferring accuracy threshold")
-#     result_key_list = ["test_acc", "training_iteration", "ggap"]
-#     config_key_list = []
-#     property_keys = {
-#         "result_keys": result_key_list,
-#         "config_keys": config_key_list,
-#     }
-#     ds = PropertyDataset(
-#         root,  # path from which to load the dataset
-#         epoch_lst=epoch_list,  # list of epochs to load
-#         train_val_test="train",  # determines whcih dataset split to use
-#         ds_split=[
-#             1.0,
-#             0.0,
-#             0.0,
-#         ],  # sets ration between [train, test] or [train, val, test]
-#         property_keys=property_keys,  # keys of properties to load
-#     )
-#     acc_threshold = torch.quantile(torch.tensor(ds.properties["test_acc"]), q=quantile)
-#     return acc_threshold.item()
-
-# acc_thresh = infer_acc_threshold(zoo_path, epoch_list, quantile=0.70)
-
-# def filter_top_q(path):
-#     fname = Path(path).joinpath("result.json")
-#     restmp = {}
-#     for line in fname.open():
-#         restmp = json.loads(line)
-#         if restmp["training_iteration"] in epoch_list:
-#             break
-#         else:
-#             restmp = {}
-#     if restmp.get("test_acc", 0.0) > acc_thresh:
-#         return False
-#     else:
-#         return True
-
-
-def prep_data():
-    dataset_target_path = [OUT_DIR,]
+def prep_data(out_dir=OUT_DIR, in_dir=IN_DIR):
+    dataset_target_path = [out_dir,]
     # mkdir target path if it does not exist
     for path in dataset_target_path:
         path.mkdir(parents=True, exist_ok=True)
 
-    zoo_path = [IN_DIR]
+    zoo_path = [in_dir]
     zoo_path_and_permutation_spec_and_target_path = [
         (zoo_path[0], smallcnnzoo_permutation_spec, dataset_target_path[0]),
     ]
@@ -152,4 +113,8 @@ def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_
 
 
 if __name__ == "__main__":
-    prep_data()
+    ARGS = ArgumentParser()
+    ARGS.add_argument("--out_dir", type=Path, default=OUT_DIR, help="Output directory for preprocessed dataset")
+    ARGS.add_argument("--in_dir", type=Path, default=IN_DIR, help="Input directory containing the original dataset")
+    args = ARGS.parse_args()
+    prep_data(out_dir=args.out_dir, in_dir=args.in_dir)
