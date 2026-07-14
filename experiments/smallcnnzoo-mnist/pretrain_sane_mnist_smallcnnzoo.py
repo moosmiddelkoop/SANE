@@ -26,6 +26,9 @@ OUTPUT_PATH = Path("/projects/prjs2156/shared/wsl/metanets/sane_pretraining")
 # short, informative human-readable tag for this launch: names the trial dir and the W&B run
 # (the trial_id suffix keeps names unique across launches)
 RUN_TAG = "gradient-clip-2.0"
+DATA_PATH = Path(os.environ.get("SANE_DATA_DIR", "/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist_preprocessed/"))
+EXPERIMENT_NAME = "sane_mnist_smallcnnzoo"
+WANDB_PROJECT = "sane-mnist-smallcnnzoo"
 
 def main():
     ### set experiment resources ####
@@ -42,7 +45,7 @@ def main():
     print(f"resources_per_trial: {resources_per_trial}")
 
     ### configure experiment #########
-    experiment_name = "sane_mnist_smallcnnzoo"
+    experiment_name = EXPERIMENT_NAME
 
     # set module parameterscd 
     config = {}
@@ -109,19 +112,13 @@ def main():
         pass
 
     ###### Datasets ###########################################################################
-    # pre-compute dataset and drop in torch.save
-    # data_path = output_dir.joinpath(experiment_name)
-    data_path = Path(os.environ.get(
-        "SANE_DATA_DIR",
-        "/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist_preprocessed/",
-    ))
-    data_path.mkdir(exist_ok=True)
+    DATA_PATH.mkdir(exist_ok=True)
     # path to ffcv dataset for training
-    config["dataset::dump"] = data_path.joinpath("dataset.pt").absolute()
+    config["dataset::dump"] = DATA_PATH.joinpath("dataset.pt").absolute()
     config["downstreamtask::dataset"] = None
     # call dataset prepper function
     logging.info("prepare data")
-    # prep_data(target_dataset_path=data_path)
+    # prep_data(target_dataset_path=DATA_PATH)
 
     ### Augmentations
     config["trainloader::workers"] = 8
@@ -169,7 +166,7 @@ def main():
         # resume=True,  # resumes from previous run. if run should be done all over, set resume=False
         reuse_actors=False,
         verbose=3,
-        callbacks=[WandbLoggerCallback(project="sane-mnist-smallcnnzoo")],
+        callbacks=[WandbLoggerCallback(project=WANDB_PROJECT)],
     )
 
     ray.shutdown()
