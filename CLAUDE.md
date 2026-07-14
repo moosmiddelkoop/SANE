@@ -21,7 +21,7 @@ The pipeline is **always**: download a model zoo → preprocess into tokenized t
 
 ### 1. Data: model zoos → tokenized datasets
 - Zoo download scripts live in `data/` (`download_*.sh`). The CIFAR-10 CNN sample is the smallest and is what the quick-start notebook uses.
-- Preprocessing scripts (`data/preprocess_dataset_*.py`) convert a zoo of checkpoints into a `dataset.pt` containing `{"trainset", "valset", "testset"}` of `PreprocessedSamplingDataset`. Key concepts the preprocessor needs:
+- Preprocessing scripts (`data/preprocess_dataset_*.py`) convert a zoo of checkpoints into a consolidated `dataset.pt` containing `{"trainset", "valset", "testset"}` of `TensorSamplingDataset` (all samples stacked into in-RAM tensors; one sequential read at training time) via `SANE.datasets.dataset_preprocessing_consolidated`. The original variant (`dataset_preprocessing.py`: per-sample `.pt` files in `dataset_torch.{split}/` dirs, wrapped by path-based `PreprocessedSamplingDataset`) still exists — switch the entry script's import to use it. Legacy per-sample zoos can be converted with `data/consolidate_preprocessed.py`. Key concepts the preprocessor needs:
   - **Permutation spec** (`SANE.git_re_basin.git_re_basin`): describes which weights can be permuted together for the architecture. Use `zoo_cnn_permutation_spec` / `zoo_cnn_large_permutation_spec` / `resnet18_permutation_spec`.
   - **Tokensize / windowsize**: weights are sliced into fixed-size tokens; `windowsize` is the number of tokens per sample. `tokensize=0` means "infer".
   - **Standardize / map_to_canonical**: standardize tokens, and remap permutation-equivalent models to a canonical form for the contrastive objective.
