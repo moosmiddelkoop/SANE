@@ -14,10 +14,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 from pathlib import Path
 
-import torch
-
-from SANE.datasets.dataset_preprocessing import prepare_multiple_datasets
-from SANE.datasets.dataset_sampling_preprocessed import PreprocessedSamplingDataset
+from SANE.datasets.dataset_preprocessing_consolidated import prepare_multiple_datasets
 from SANE.git_re_basin.git_re_basin import smallcnnzoo_permutation_spec
 
 logging.basicConfig(level=logging.INFO)
@@ -78,19 +75,6 @@ def prep_data():
     ]
     configurations = create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_fn=None)
     prepare_multiple_datasets(configurations=configurations)
-
-    # create dataset dump for later use
-    ds_train = PreprocessedSamplingDataset(zoo_paths=dataset_target_path, split="train")
-    ds_val = PreprocessedSamplingDataset(zoo_paths=dataset_target_path, split="val")
-    ds_test = PreprocessedSamplingDataset(zoo_paths=dataset_target_path, split="test")
-
-    dataset = {
-        "trainset": ds_train,
-        "valset": ds_val,
-        "testset": ds_test,
-    }
-
-    torch.save(dataset, dataset_target_path[0] / "dataset.pt")
 
 
 def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_fn=None):
