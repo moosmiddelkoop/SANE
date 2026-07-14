@@ -50,6 +50,17 @@ The preprocessed datasets have no specific dependency requirements, other than r
 
 Please note that this is not the exact models used in the paper and will therefore produce different results. The full zoos can be downloaded from [modelzoos.cc](https://modelzoos.cc/) and used in the same way as the zoo sample.  
 
+### Preprocessing model zoos
+Preprocessing turns a zoo of raw checkpoints into the tokenized dataset that pretraining reads. The consolidated pipeline (`SANE.datasets.dataset_preprocessing_consolidated`) runs, per split: discover model directories in the zoo → load the checkpoints listed in `epoch_list` in parallel via Ray → map permutation symmetries to a canonical form with git-re-basin (`map_to_canonical`) → standardize weights per layer → tokenize each checkpoint into `windowsize` tokens of size `tokensize` → stack everything into in-RAM tensors, saved as a single `<out_dir>/dataset.pt` plus `dataset_info_<split>.json` and `dataset_normalization_<split>.json`.
+
+For the small CNN zoos (3 conv layers + dense head), the entry point is
+```bash
+python3 preprocess_dataset_smallcnnzoo.py --in_dir=<zoo dir> --out_dir=<target dir>
+```
+in `./data/`. All datasets of this zoo family (MNIST, Fashion-MNIST, CIFAR-10, SVHN) share the same architecture and hence the same token geometry (`tokensize=145`, `windowsize=58`, epochs 0–8), so one script serves them all — `data/preprocess_all_unthi.sh` is a SLURM batch script that runs them back to back.
+
+> **Note — memory.** The consolidated pipeline holds an entire split in RAM: all raw checkpoints as a graph of small Python/tensor objects (~4–5 GB for a 30k-model small-CNN zoo) plus the preallocated output tensors. The final stacking step iterates with a `DataLoader` whose forked workers copy-on-write duplicate that object graph, so peak memory scales with *workers × zoo size*; stacking workers are therefore capped at 8 regardless of `num_threads`. Budget roughly `parent process + 8 × object-graph size` (~50 GB for a 30k-model zoo) when sizing a SLURM allocation.
+
 ### Pretraining SANE
 Code to pretrain SANE on the sample zoo is contained in `experiments/pretrain_sane_cifar100_resnet18.py`. The code relies on ray.tune to manage resources, but currently only runs a single config. 
 To vary any of the configurations, exchange the value with `tune.grid_search([value_1, ..., value_n])`. To run the experiment, run
