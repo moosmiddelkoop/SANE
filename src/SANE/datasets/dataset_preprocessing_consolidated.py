@@ -337,7 +337,11 @@ def preprocess_single_split(
     logging.info(f"props.shape: {props.shape} - dtype: {props.dtype}")
 
     logging.info("stack samples into tensors")
-    split_dataset = stack_dataset(dataset, num_workers=num_threads)
+    # cap stacking workers: each DataLoader worker forks the parent and
+    # copy-on-write duplicates the full python object graph of dataset.data
+    # (refcount writes dirty every page), so memory scales with
+    # num_workers x dataset size
+    split_dataset = stack_dataset(dataset, num_workers=min(num_threads, 8))
 
     # get metadata and write to disk
     # get full sample and infer dimensions
