@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 ## General coding instructions
-BE MINIMALIST. I like the code to be as lightweight sa possible. This is code I have to look at and understand fully aswell. Every extra line means more cognitive load. Don't build too many unnecessary abstractions or robustness features. Don't over-engineer. We start simple, and only add complexity when it proves needed.
+BE MINIMALIST. I like the code to be as lightweight sa possible. This is code I have to look at and understand fully aswell. Every extra line means more cognitive load. Don't build too many unnecessary abstractions or robustness features. Don't over-engineer. We start simple, and only add complexity when it proves needed. Give the variables names that are good to understand, It's not a big deal if they are long.
 
 ## How to communicate with me
 Only report to me in ASD-STE100 Simplified Technical English.
