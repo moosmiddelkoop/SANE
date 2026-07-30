@@ -1,0 +1,168 @@
+\section{Methods}
+
+\textit{Hyper-representations} learn an encoder-decoder model on the weights of NNs \citep{schurholtSelfSupervisedRepresentationLearning2021}: 
+    \begin{align}
+        \mathbf{z} = g_{\theta}(\mathbf{W}) \label{eq:hrep_enc}\\
+        \mathbf{\widehat{W}} = h_{\psi}( \mathbf{z} ),\label{eq:hrep_dec}
+    \end{align}
+where $g_{\theta}$ is the encoder which maps the flattened weights $\mathbf{W}$ to embeddings $\mathbf{z}$, and $h_{\psi}$ decodes back to reconstructed weights $\mathbf{\widehat{W}}$.
+Even though previous work realized both encoder and decoder with transformer backbones, the weight vector had to be of fixed size, and models are represented in a global embedding space \citep{schurholtSelfSupervisedRepresentationLearning2021, schurholtHyperRepresentationsGenerativeModels2022}. %, severely limiting the size of the models to which they could be applied.
+\textit{Hyper-representations} are trained with a reconstruction loss $\mathcal{L}_{rec}=\|\mathbf{W}-\mathbf{\widehat{W}} \|_2^2$ and contrastive guidance loss $\mathcal{L}_{c} = NTXent(p_{\phi}(\mathbf{z_i}),p_{\phi}(\mathbf{z_j}))$, where $p_{\phi}$ is a projection head. \citet{schurholtSelfSupervisedRepresentationLearning2021} proposed weight permutation, noise, and masking as augmentations to generate views $i,j$ of the same model.
+
+
+Existing \textit{hyper-representation} methods have two major limitations: 
+i) using the full weight vector to compute global model embeddings becomes infeasible for larger models; 
+and ii) they can only embed models that share the architecture with the original model zoo.
+Our \ourmethod method addresses both of these limitations. 
+To make models more digestible for pretraining and inference, we propose to express models as sequences of token vectors.
+To address i), \ourmethod learns per-token embeddings, which are trained on subsequences of the full base model sequence. 
+This way, the memory and compute load are decoupled from the base model size. 
+By decoupling the tokenization from the representation learning, we also address ii). 
+The models in the model zoo set can have varying architectures, as long as they are expressed as a sequence with the same token-vector size. 
+The transformer backbone and per-token embeddings also allow changes to the length of the sequence during or after training. 
+Below, we provide technical details on \ourmethod.
+We first provide details on pretraining \ourmethod, computing model embeddings, and sampling models; and we then introduce additional \textit{aligning}, \textit{haloing}, and \textit{bn-conditioning} methods to stabilize training and inference.
+
+\textbf{\ourmethod: \ourmethodlong}
+\label{sec:seq_hyper_reps}
+To tokenize weights, we reshape the weights  $\mathbf{W}_{raw} \in \mathbb{R}^{c_{out}\times c_{1}\times\cdots \times c_{in}}$ to 2d matrices $\mathbf{W} \in \mathbb{R}^{c_{out}\times c_{r}}$, where $c_{out}$ are the outgoing channels, and where $c_{r}$ the remaining, flattened dimensions. 
+We then slice the weights row-wise, along the outgoing channel. 
+Using global token size $d_t$, we split the slices into multiple parts if $c_r>d_t$ and zero-pad to fill up to $d_t$. 
+For weights $\mathbf{W}_l$ of layer $l$, this gives us tokens $\mathbf{T}_l \in \mathbb{R}^{n_l \times d_t}$, where $n_l = c_{out,l} \, \mbox{ceil}(\frac{c_r}{d_t})$. 
+Since all tokens $\mathbf{T}_l$ share the same token size, the tokens of layer $l=1,...,L$ can be concatenated to get the model token sequence $\mathbf{T} \in \mathbb{R}^{N\times d_t}$.
+To indicate the position of a token, we use a 3-dimensional position $\mathbf{P}_n = [n,l,k]$, where $n\in[1, N]$ indicates the global position in the sequence, $l \in [1, L]$ indicate the layer index, and $k \in [1, K(l)]$ is the position of the token within the layer.
+
+Out of the full token sequence $\mathbf{T}$ and positions $\mathbf{P} \in \mathbb{N}^{N \times 3}$, we take a random consecutive sub-sequence $\mathbf{T}_{s,n}=\mathbf{T}_{n,...,n+ws}$ with positions $\mathbf{P}_{s,n}=\mathbf{P}_{n,...,n+ws}$ of length $ws$. 
+We call these sub-sequences windows and the length of the sub-sequence the window size $ws$.
+
+For \ourmethod on windows of tokens, we extend Eqs. \ref{eq:hrep_enc} and \ref{eq:hrep_dec} to encode and decode token windows as
+    \begin{align}
+        \mathbf{z}_{s,n} &= g_{\theta}(\mathbf{T}_{s,n},\mathbf{P}_{s,n}) \label{eq:seqhrep_enc}\\
+        \widehat{\mathbf{T}}_{s,n} &= h_{\psi}( \mathbf{z}_{s,n},\mathbf{P}_{s,n}),\label{eq:seqhrep_dec}
+    \end{align}
+where $\mathbf{z}_{s,n} \in \mathbb{R}^{ws \times d_z}$ is the per-token latent representation of the window. 
+In contrast to \textit{hyper-representations} Eqs. \ref{eq:hrep_enc} and \ref{eq:hrep_dec} which operate on the full flattened weights of a model, \ourmethod encodes sub-sequences of tokenized models.
+For simplicity, we apply linear mapping to and from the bottleneck, to reduce tokens from $d_t$ to $d_z$. 
+
+We adapt the composite training loss of \textit{hyper-representations}, $\mathcal{L} = (1-\gamma) \mathcal{L}_{rec} + \gamma \mathcal{L}_c$, for sequences as:
+\begin{align}
+    \mathcal{L}_{rec} &=\| \mathbf{M}_{s,n} \odot \left( \mathbf{T}_{s,n}-\widehat{\mathbf{T}}_{s,n} \right)\|_2^2 \label{eq:seqhrep_recon_loss} \\
+    \mathcal{L}_{c} &= NTXent(p_{\phi}(\mathbf{z_{s,n,i}}),p_{\phi}(\mathbf{z_{s,n,j}})). \label{eq:seqhrep_con_loss}
+\end{align}
+Here, the mask $\mathbf{M}_{s,n}$ indicates signal with $1$ and padding with $0$, to ensure that the loss is only computed on actual weights. The contrastive guidance loss uses the augmented views $i,j$ and projection head $p_{\phi}$. 
+
+
+The pretraining procedure is detailed in Algorithm \ref{alg:pretraining}. 
+We preprocess model weights by standardizing weights per layer and aligning all models to a reference model; see \textit{Model Alignment} below.
+As in previous work \citep{schurholtSelfSupervisedRepresentationLearning2021,peeblesLearningLearnGenerative2022}, 
+the encoder and decoder are realized as transformer blocks. 
+Training on the full sequence would memory-limit the base-model size by its sequence length.
+\begin{algorithm}[]
+% \vspace{-6pt}
+   \caption{\ourmethod pretraining}
+   \label{alg:pretraining}
+\begin{algorithmic}
+    \STATE {\bfseries Input:} population of models
+    \STATE \textbf{i:} standardize models weights
+    \STATE \textbf{ii:} align models to one common reference model
+    \STATE \textbf{iii:} tokenize models to tokens $\mathbf{T}$, positions $\mathbf{P}$, masks $\mathbf{M}$
+    \STATE \textbf{iv:} draw \textit{k} windows per model: $\mathbf{T}_{s,n}$, $\mathbf{P}_{s,n}$,  $\mathbf{M}_{s,n}$
+    \STATE \textbf{v:} train on $\mathcal{L}_{train}$ until convergence of $\mathcal{L}_{val}$
+\end{algorithmic}
+% \vspace{-6pt}
+\end{algorithm}
+Training the encoder and decoder on windows instead of the full model sequence decouples the memory requirement from the base model's full sequence length. 
+The window size can be used to balance GPU memory load and the amount of context information.
+Notably, since we disentangle the tokenization from the representation learning model, \ourmethod also allows us to embed sequences of models with varying architectures, as long as their token size is the same. 
+To prevent potential overfitting to specific window positions, we propose to sample windows from each model sequence multiple times randomly. 
+
+
+\textbf{Computing \ourmethod Model Embeddings.}
+\ourmethod can be used to analyze models in embedding space, e.g., by using embeddings as features to predict properties such as accuracy or to identify other model quality metrics.
+In contrast to \textit{hyper-representations}, \ourmethod can embed different model sizes and architectures in the same embedding space.
+To embed any model, we begin by preprocessing weights by standardizing per layer and aligning models to a pre-defined reference model (see \textit{Model Alignment} below).
+Subsequently, the preprocessed models are tokenized as described above.
+For short model sequences, the embedding sequences can be directly computed as $\mathbf{z} = g_\theta(\mathbf{T},\mathbf{P})$. For larger models, the token sequences are too long to embed as one. We therefore employ \textit{haloing} (see below) to encode the entire sequence as coherent subsequences.
+Algorithm \ref{alg:embeddings} summarizes the embedding computation. 
+% Algorithm \ref{alg:embeddings} details the use of model embedding for discriminative tasks.
+\vspace{-4pt}
+\begin{algorithm}[]
+   \caption{\ourmethod model embedding computation}
+   \label{alg:embeddings}
+\begin{algorithmic}
+    \STATE {\bfseries Input:} population of models
+    \STATE \textbf{i:} preprocessing: standardize and align model weights
+    \STATE \textbf{ii:} tokenize models: $\mathbf{T}$, positions $\mathbf{P}$, property $y$
+    \STATE \textbf{iii:} split $\mathbf{T}$, $\mathbf{P}$ to consecutive chunks $\mathbf{T}_{hs,n}, \mathbf{P}_{hs,n}$ 
+    \STATE \textbf{iv:} compute embeddings $\mathbf{z}_{hs,n} = g_{\theta}(\mathbf{T}_{hs,n},\mathbf{P}_{hs,n})$
+    \STATE \textbf{v:} stitch model embeddings $\mathbf{z}$ together from chunks $\mathbf{z}_{hs,n}$
+    % \STATE \textbf{vii:} solve linear system: $\mathbf{\bar{Z}x = \mathbf{y}}$
+\end{algorithmic}
+\end{algorithm}
+\vspace{-8pt}
+To compare different models in embedding space, we aggregate the sequences of token embeddings. To that end, we understand the token sequence of one model to form a surface in embedding space and choose to represent that surface by its center of gravity. That is, we take the mean of all tokens along the embedding dimension as $\mathbf{\bar{z}} = \frac{1}{N} \sum_{n=1}^N(\mathbf{z}_n)$. That results in one vector in embedding space per model. Of course, one could use other aggregation methods with \ourmethod.
+
+\textbf{Sampling Models with Few Prompt Examples.}
+Sampling models from \ourmethod promises to transfer knowledge from existing populations to new models with different architectures.
+Given pretrained encoders $g_{\theta}$ and decoder $h_\psi$, the challenge is to identify the distribution $\mathcal{P}$ in latent space which contains the targeted properties.
+To approximate that distribution, previous work used a large number of well-trained models \citep{peeblesLearningLearnGenerative2022,schurholtHyperRepresentationsGenerativeModels2022}.
+However, increasing the size of the sampled models makes generating a large number of high-performance models exceedingly expensive.
+Instead of using expensive high-performance models to model $\mathcal{P}$ directly, we propose to find a rough estimate of $\mathcal{P}$, sample broadly, and refine $\mathcal{P}$ using the signal from the sampled models.
+Using $E$ prompt examples $\mathbf{W}^e$ we compute the token sequence $\mathbf{T}^e$ and corresponding embedding sequence $\mathbf{z}^e = g_{\theta}(\mathbf{T}^e, \mathbf{P})$. Following previous work, we model the distribution $\mathcal{P}$ with a Kernel Density Estimation (KDE) per token as $\mathcal{P}_{e \in E}(\mathbf{z}_n^e)$ ~\citep{schurholtHyperRepresentationsGenerativeModels2022}.
+We then draw $k$ new token samples as:
+\begin{equation}
+    \mathbf{z}_n^k \sim \mathcal{P}_{e \in E}(\mathbf{z}_n^e).
+\end{equation}
+We reconstruct the sampled embeddings to weight tokens $\mathbf{T}^k = h_{\psi}(\mathbf{z}^k,\mathbf{P})$ and then weights $\mathbf{W}^k$. 
+Sampling tokens can be done cheaply, decoding and evaluating the weights using some performance metric involves only forward passes and is likewise cheap. 
+Therefore, one can draw a large amount of samples and keep only the top $m$ models, according to the performance metric. 
+We call this method \emph{subsampling}.
+The process can be refined iteratively, by re-using the embeddings $\mathbf{z}^k$ of the best models as new prompt examples, to adjust the sampling distribution to best fit the needs of the performance metric. 
+We call this sampling method \emph{bootstrapped}.
+By only requiring a rough version of $\mathcal{P}$ and refining with the target signal, our sampling strategy reduces requirements on prompt examples such that only very few and slightly trained prompt examples are necessary. The overall sampling method is outlined in Algorithm~\ref{alg:generating}. It makes use of \textit{model alignment}, \textit{haloing}, and \textit{batch-norm conditioning} which are detailed below.
+In addition to the compute efficiency, these sampling methods learn the distribution of targeted models in embedding space. 
+Further, they are not bound to the distribution of prompt examples, but instead they can find the distribution that best satisfies the target performance metric, independent of the prompt examples.
+\begin{algorithm}[]
+   \caption{Sampling models with \ourmethod }
+   \label{alg:generating}
+\begin{algorithmic}
+    \STATE {\bfseries Input:} model prompt examples $\mathbf{W}^e$
+    \STATE \textbf{i:} tokenize prompt examples: tokens $\mathbf{T}^e$, positions $\mathbf{P}^e$
+    \STATE \textbf{ii:} embed prompt examples $\mathbf{z}^e$ following Alg. \ref{alg:embeddings}
+    \FOR{$i_{boot} = 1$ {\bfseries to} \textit{bootstrap iterations}}
+        \STATE \textbf{iii:} draw $k$ samples $\mathbf{z}_n^k \sim \mathcal{P}_{e \in E}(\mathbf{z}_n^e)$
+        \STATE \textbf{iv:} decode to tokens $\mathbf{T^k} = h_{\psi}( \mathbf{z}^k )$
+        \STATE \textbf{v:} apply batch-norm conditioning
+        \STATE \textbf{vi:} compute target metric and keep best $m$ models
+        \IF{\textit{bootstrap iterations}$\; > 1$}
+            \STATE \textbf{vii:} $\mathbf{z}^e = \mathbf{z}^k for \; k \in m$ 
+        \ENDIF
+    \ENDFOR
+\end{algorithmic}
+\end{algorithm}
+\vspace{-8pt}
+% 
+ 
+Growing sample model size poses several additional challenges, three of which we address with the following methods. We evaluate these methods in Appendix \ref{sec:ablation}.\looseness-1
+
+\textbf{Model Alignment.}
+Symmetries in the weight space of NN complicate representation learning of the weights. The number of symmetries grows fast with model size \citep{bishopPatternRecognitionMachine2006}. 
+To make representation learning easier, we reduced all training models to a unique, canonical basis of a reference model.
+With reference model $A$ we align model $B$ by finding the permutation $\pi = argmin_{\pi} \|\text{vec}(\Theta{(A)}) - \text{vec}(\Theta(B))\|^2$, where $\Theta(A)$ are the parameters of model $A$ \citep{ainsworthGitReBasinMerging2022}. 
+We fix the same reference model across all dataset splits and use the last epoch of each model to determine the permutation for that model.
+
+\textbf{Haloing.}
+The sequential decomposition of \ourmethod decouples the pretraining sequence length from downstream task sequence lengths.
+Since the memory load at inference is considerably lower, the sequences at inference can be longer. 
+However, full model sequences may still not fit in memory and may have to be processed in slices.
+To ensure consistency between the slices, we add context around the content windows. With added context halo before and after the content window, we get
+$\mathbf{T}_{hs,n}=\mathbf{T}_{n-h,..,n,...,n+ws,n+ws+h}$. 
+Similar to approaches in computer vision \citep{vaswaniScalingLocalSelfAttention2021}, this context halo is added for the pass through encoder and decoder, but disregarded after.
+
+\textbf{Batch-Norm Conditioning.}
+In most current NN models, some parameters like batch-norm weights are updated during forward passes instead of with gradients. 
+Since that makes them structurally different, we exclude these parameters from representation learning and sampling with \ourmethod.
+Nonetheless, these parameters need to be instantiated for sampled models to work well. 
+For model sampling methods, we therefore propose to condition batch-norm parameters by performing a few forward passes with some target data. 
+Importantly, this process does not update the learned weights of the model. 
+It serves to align the batch norm statistics with the model's weights.
