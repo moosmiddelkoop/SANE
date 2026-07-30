@@ -813,7 +813,7 @@ class DownstreamTaskLearner:
         trainset,
         testset,
         target_keys: list,
-        batch_size: int = 100,
+        batch_size: int = 64,
         epochs: int = 200,
         lr: float = 1e-3,
         mlp_batch_size: int = 64,
@@ -832,13 +832,17 @@ class DownstreamTaskLearner:
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
         def _prep(dataset):
-            weights, _ = dataset.__get_weights__()
-            try:
-                positions = torch.stack(dataset.pos)
-            except Exception:
-                positions = repeat(dataset.positions, "n d -> b n d", b=weights.shape[0])
-            embeddings = self.map_embeddings(weights=weights, pos=positions, model=model, batch_size=batch_size)
-            targets = self._stack_target_columns(dataset, target_keys)
+            if isinstance(dataset, tuple):
+                # precomputed (embeddings, targets), e.g. cached by recall_prediction_mse_spread.py
+                embeddings, targets = dataset
+            else:
+                weights, _ = dataset.__get_weights__()
+                try:
+                    positions = torch.stack(dataset.pos)
+                except Exception:
+                    positions = repeat(dataset.positions, "n d -> b n d", b=weights.shape[0])
+                embeddings = self.map_embeddings(weights=weights, pos=positions, model=model, batch_size=batch_size)
+                targets = self._stack_target_columns(dataset, target_keys)
             targets = torch.where(targets == sentinel, torch.full_like(targets, float("nan")), targets)
             valid_rows = ~torch.isnan(targets).any(dim=1)
             return embeddings[valid_rows].float().to(self.device), targets[valid_rows].float().to(self.device)
@@ -880,6 +884,14 @@ class DownstreamTaskLearner:
                     log_fn({"loss_step": loss_value, "epoch": epoch, "step": global_step})
                 global_step += 1
             last_loss = loss_sum / n_batches
+            # compute test loss
+            mlp.eval()
+            with torch.no_grad():
+                pred_test = mlp(embeddings_test)
+                test_loss = loss_fn(pred_test, targets_test).item()
+            if log_fn is not None:
+                log_fn({"test_loss_epoch": test_loss, "epoch": epoch})
+            mlp.train()
             if log_fn is not None:
                 log_fn({"loss_epoch": last_loss, "epoch": epoch})
 
@@ -898,6 +910,7 @@ class DownstreamTaskLearner:
             "r2_train": r2_train,
             "r2_test": r2_test,
             "target_keys": list(target_keys),
+            "mlp": mlp,
         }
 
     def eval_ood_dstask(
