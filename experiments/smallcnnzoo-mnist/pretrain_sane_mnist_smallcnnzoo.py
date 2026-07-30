@@ -23,12 +23,13 @@ from ray.air.integrations.wandb import WandbLoggerCallback
 from SANE.models.def_AE_trainable import AE_trainable
 
 OUTPUT_PATH = Path("/projects/prjs2156/shared/wsl/metanets/sane_pretraining")
-# short, informative human-readable tag for this launch: names the trial dir and the W&B run
+WANDB_PROJECT = "sane-pretraining-smallcnnzoo"
+# directory within OUTPUT_PATH where the results will be stored
+EXPERIMENT_NAME = "mnist"
+# Names the trial dir within EXPERIMENT_NAME and the W&B run 
 # (the trial_id suffix keeps names unique across launches)
-RUN_TAG = "gradient-clip-2.0"
+RUN_TAG = "mnist-v2.0"
 DATA_PATH = Path(os.environ.get("SANE_DATA_DIR", "/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist_preprocessed/"))
-EXPERIMENT_NAME = "sane_mnist_smallcnnzoo"
-WANDB_PROJECT = "sane-mnist-smallcnnzoo"
 
 def main():
     ### set experiment resources ####
@@ -92,7 +93,7 @@ def main():
     config["training::contrast"] = "simclr" # can only be "simclr" or "positive", for anything else it will do reconstruction only
     # AMP
     #
-    config["training::epochs_train"] = 50
+    config["training::epochs_train"] = 200
     config["training::output_epoch"] = 5
     # training::test_epochs also influences how frequently results are logged! AE_trainable.step() runs this 
     # amount of training epochs, and then one val/test epoch per step, and ray only updates the results after 

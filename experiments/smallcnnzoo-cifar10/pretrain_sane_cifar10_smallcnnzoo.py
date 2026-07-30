@@ -23,12 +23,14 @@ from ray.air.integrations.wandb import WandbLoggerCallback
 from SANE.models.def_AE_trainable import AE_trainable
 
 OUTPUT_PATH = Path("/projects/prjs2156/shared/wsl/metanets/sane_pretraining")
-# short, informative human-readable tag for this launch: names the trial dir and the W&B run
+WANDB_PROJECT = "sane-pretraining-smallcnnzoo"
+# directory within OUTPUT_PATH where the results will be stored
+EXPERIMENT_NAME = "cifar10"
+# Names the trial dir within EXPERIMENT_NAME and the W&B run 
 # (the trial_id suffix keeps names unique across launches)
-RUN_TAG = "pretraining-cifar10-v1.0"
+RUN_TAG = "cifar10-v1.0"
+
 DATA_PATH = Path(os.environ.get("SANE_DATA_DIR", "/projects/prjs2156/shared/wsl/unthi_zoo/unthi_cifar10_preprocessed/"))
-EXPERIMENT_NAME = "sane_cifar10_smallcnnzoo"
-WANDB_PROJECT = "sane-cifar10-smallcnnzoo"
 
 def main():
     ### set experiment resources ####
