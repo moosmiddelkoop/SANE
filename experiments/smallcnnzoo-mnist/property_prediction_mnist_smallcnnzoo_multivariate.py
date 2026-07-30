@@ -35,8 +35,14 @@ from SANE.git_re_basin.git_re_basin import smallcnnzoo_permutation_spec
 from SANE.models.def_AE_module import AEModule
 from SANE.models.def_downstream_module import DownstreamTaskLearner
 from SANE.models.downstream_baselines import LayerQuintiles
+from SANE.utils import seed_everything
 
 logging.basicConfig(level=logging.INFO)
+
+# ---------------------------------------------------------------------------
+# Seed
+# ---------------------------------------------------------------------------
+seed_everything(67)
 
 # ---------------------------------------------------------------------------
 # Paths / config
@@ -58,6 +64,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 # ---------------------------------------------------------------------------
 logging.info("Loading pretrained SANE model")
 config = json.load((TRIAL_DIR / "params.json").open("r"))
+config["seed"] = 67
 config["device"] = device
 config["model::compile"] = False  # no need to compile for inference
 

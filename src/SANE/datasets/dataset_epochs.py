@@ -74,7 +74,6 @@ class ModelDatasetBaseEpochs(Dataset):
 
         # shuffle self.path_list
         if shuffle_path:
-            random.seed(42)
             random.shuffle(self.path_list)
 
         ### Split Train and Test set ###########################################################################

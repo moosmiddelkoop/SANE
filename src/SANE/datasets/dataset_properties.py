@@ -56,7 +56,6 @@ class PropertyDataset(Dataset):
             self.path_list.extend(pth_lst_tmp)
 
         # shuffle self.path_list
-        random.seed(42)
         random.shuffle(self.path_list)
 
         ### Split Train and Test set ###########################################################################

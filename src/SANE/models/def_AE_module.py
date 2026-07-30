@@ -1,27 +1,17 @@
 import inspect
 import logging
 import os
-import random
 import statistics
 from pathlib import Path
 
-import numpy as np
 import torch
 import torch.nn as nn
 import tqdm
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+from SANE.utils import seed_everything
 from .def_AE import AE
 from .def_loss import GammaContrastReconLoss
-
-
-def seed_everything(seed: int) -> int:
-    os.environ["PYTHONHASHSEED"] = str(seed)
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    return seed
 
 
 class AEModule(nn.Module):
@@ -332,9 +322,7 @@ class AEModule(nn.Module):
         state = torch.load(path)
         # strip any `_orig_mod.` prefix left by torch.compile() so checkpoints
         # load regardless of whether they (or the current model) were compiled
-        model_state = {
-            k.removeprefix("_orig_mod."): v for k, v in state["model"].items()
-        }
+        model_state = {k.removeprefix("_orig_mod."): v for k, v in state["model"].items()}
         getattr(self.model, "_orig_mod", self.model).load_state_dict(model_state)
         if not self.reset_optimizer:
             self.optimizer.load_state_dict(state["optimizer"])
@@ -370,9 +358,7 @@ class AEModule(nn.Module):
             x = torch.cat([x_i, x_j], dim=0)
             y = torch.cat([y_i, y_j], dim=0)
             m = torch.cat([m_i, m_j], dim=0)
-            logging.debug(
-                f"train step - x: {x.shape}; y: {y.shape}, m: {m.shape}, z_i {z_i.shape}; z_j {z_j.shape};  zp_i {zp_i.shape}; zp_j {zp_j.shape}"
-            )
+            logging.debug(f"train step - x: {x.shape}; y: {y.shape}, m: {m.shape}, z_i {z_i.shape}; z_j {z_j.shape};  zp_i {zp_i.shape}; zp_j {zp_j.shape}")
             # compute loss
             perf = self.criterion(z_i=zp_i, z_j=zp_j, y=y, t=x, m=m)
             # prop loss backwards to
@@ -387,7 +373,7 @@ class AEModule(nn.Module):
             self.clip_grads()
         # update parameters
         scale_before = self.scaler.get_scale()
-        self.scaler.step(self.optimizer) # invokes scaler._unscale and updates parameters,. unless scaler._unscale was already explicitly called
+        self.scaler.step(self.optimizer)  # invokes scaler._unscale and updates parameters,. unless scaler._unscale was already explicitly called
         # update scaler
         self.scaler.update()
         # the scale only decreases when step() found inf/nan grads and was skipped
@@ -475,9 +461,7 @@ class AEModule(nn.Module):
         # pre-clip gradient norm stats (norm-clipping mode only); median over max/mean
         # because a few near-overflow steps would dominate the mean
         if self.pre_clip_norms:
-            perf_out["debug/clipped_steps"] = sum(
-                n > self.clipping_value for n in self.pre_clip_norms
-            )
+            perf_out["debug/clipped_steps"] = sum(n > self.clipping_value for n in self.pre_clip_norms)
             perf_out["debug/pre_clip_norm_max"] = max(self.pre_clip_norms)
             perf_out["debug/pre_clip_norm_median"] = statistics.median(self.pre_clip_norms)
 

@@ -11,6 +11,8 @@ import timeit
 
 import logging
 
+from SANE.utils import seed_everything
+
 """
 define net
 ##############################################################################
@@ -1175,11 +1177,7 @@ class NNmodule(nn.Module):
 
         # setting seeds for reproducibility
         # https://pytorch.org/docs/stable/notes/randomness.html
-        torch.manual_seed(seed)
-        np.random.seed(seed)
-        if self.device == "cuda":
-            torch.backends.cudnn.deterministic = True
-            torch.backends.cudnn.benchmark = False
+        seed_everything(config.get("seed", seed))
 
         # construct model
         if config["model::type"] == "MLP":

@@ -536,7 +536,6 @@ def finetune_single(
         config["training::sample_epoch"] = sample_epoch
         path_list = [f for f in Path(path_to_samples).iterdir() if f.is_dir()]
         # slice for no_samples
-        random.seed(42)
         random.shuffle(path_list)
         path_list = path_list[:no_samples]
         config["training::sample_number"] = None
