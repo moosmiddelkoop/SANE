@@ -1,38 +1,25 @@
-import torch
-from torch.utils.data import Dataset
-
+import logging
 from pathlib import Path
-import random
-import copy
+from typing import List, Optional, Union
 
-import itertools
-from math import factorial
+import ray
+import torch
+import tqdm
+from rebasin import PermutationCoordinateDescent
 
 from SANE.datasets.dataset_epochs import ModelDatasetBaseEpochs
 from SANE.git_re_basin.git_re_basin import (
     PermutationSpec,
-    zoo_cnn_permutation_spec,
-    weight_matching,
     apply_permutation,
+    weight_matching,
+    zoo_cnn_permutation_spec,
 )
-
 from SANE.models.def_net import NNmodule
 
 from .dataset_auxiliaries import (
     tokenize_checkpoint,
 )
-
-
-import logging
-
-from typing import List, Union, Optional
-
-import ray
 from .progress_bar import ProgressBar
-
-import tqdm
-
-from rebasin import PermutationCoordinateDescent
 
 
 #####################################################################
@@ -48,7 +35,7 @@ class DatasetTokens(ModelDatasetBaseEpochs):
     def __init__(
         self,
         root,
-        epoch_lst=10,
+        epoch_lst: List[int] = [10],
         mode="vector",  # "vector", "checkpoint"
         permutation_spec: Optional[PermutationSpec] = zoo_cnn_permutation_spec,
         map_to_canonical: bool = False,
@@ -142,9 +129,7 @@ class DatasetTokens(ModelDatasetBaseEpochs):
         if self.precision != "32":
             logging.info("set precision")
             if not self.standardize:
-                logging.warning(
-                    "using lower precision for non-standardized data may cause loss of information"
-                )
+                logging.warning("using lower precision for non-standardized data may cause loss of information")
             self.set_precision(self.precision)
 
     def tokenize_data(self):
@@ -176,14 +161,9 @@ class DatasetTokens(ModelDatasetBaseEpochs):
         elif self.precision == "64":
             dtype = torch.float64
         else:
-            raise NotImplementedError(
-                f"precision {self.precision} is not implemented. use 32 or 64"
-            )
+            raise NotImplementedError(f"precision {self.precision} is not implemented. use 32 or 64")
         # apply precision to weights / tokens
-        self.data = [
-            [self.data[idx][jdx].to(dtype) for jdx in range(len(self.data[idx]))]
-            for idx in range(len(self.data))
-        ]
+        self.data = [[self.data[idx][jdx].to(dtype) for jdx in range(len(self.data[idx]))] for idx in range(len(self.data))]
 
     ## get_weights ####################################################################################################################################################################
     def __get_weights__(
@@ -194,19 +174,9 @@ class DatasetTokens(ModelDatasetBaseEpochs):
             torch.Tensor with full dataset as sequence of components [n_samples,n_tokens_per_sample,token_dim]
         """
         if not self.mode == "vector":
-            raise NotImplementedError(
-                "mode other than vector is not implemented for DatasetTokens"
-            )
-        data_out = [
-            self.data[idx][jdx]
-            for idx in range(len(self.data))
-            for jdx in range(len(self.data[idx]))
-        ]
-        mask_out = [
-            self.mask
-            for idx in range(len(self.data))
-            for jdx in range(len(self.data[idx]))
-        ]
+            raise NotImplementedError("mode other than vector is not implemented for DatasetTokens")
+        data_out = [self.data[idx][jdx] for idx in range(len(self.data)) for jdx in range(len(self.data[idx]))]
+        mask_out = [self.mask for idx in range(len(self.data)) for jdx in range(len(self.data[idx]))]
         data_out = torch.stack(data_out)
         mask_out = torch.stack(mask_out)
         logging.debug(f"shape of weight tensor: {data_out.shape}")
@@ -346,14 +316,10 @@ class DatasetTokens(ModelDatasetBaseEpochs):
                 for idx in range(len(self.data)):
                     for jdx in range(len(self.data[idx])):
                         # normalize weights
-                        self.data[idx][jdx][key] = (
-                            self.data[idx][jdx][key] - mu
-                        ) / sigma
+                        self.data[idx][jdx][key] = (self.data[idx][jdx][key] - mu) / sigma
                         # normalize biases if they exist
                         if key.replace("weight", "bias") in self.data[idx][jdx]:
-                            self.data[idx][jdx][key.replace("weight", "bias")] = (
-                                self.data[idx][jdx][key.replace("weight", "bias")] - mu
-                            ) / sigma
+                            self.data[idx][jdx][key.replace("weight", "bias")] = (self.data[idx][jdx][key.replace("weight", "bias")] - mu) / sigma
 
         self.layers = layers
 
@@ -405,15 +371,10 @@ class DatasetTokens(ModelDatasetBaseEpochs):
                 for idx in range(len(self.data)):
                     for jdx in range(len(self.data[idx])):
                         # normalize weights
-                        self.data[idx][jdx][key] = (
-                            self.data[idx][jdx][key] - min_glob
-                        ) / (max_glob - min_glob) * 2 - 1
+                        self.data[idx][jdx][key] = (self.data[idx][jdx][key] - min_glob) / (max_glob - min_glob) * 2 - 1
                         # normalize biases if they exist
                         if key.replace("weight", "bias") in self.data[idx][jdx]:
-                            self.data[idx][jdx][key.replace("weight", "bias")] = (
-                                self.data[idx][jdx][key.replace("weight", "bias")]
-                                - min_glob
-                            ) / (max_glob - min_glob) * 2 - 1
+                            self.data[idx][jdx][key.replace("weight", "bias")] = (self.data[idx][jdx][key.replace("weight", "bias")] - min_glob) / (max_glob - min_glob) * 2 - 1
 
         self.layers = layers
 
@@ -425,9 +386,7 @@ class DatasetTokens(ModelDatasetBaseEpochs):
         """
         logging.info("apply l2 normalization")
         # iterate over data points
-        for idx in tqdm.tqdm(
-            range(len(self.data)), desc="normalize model weights per model"
-        ):
+        for idx in tqdm.tqdm(range(len(self.data)), desc="normalize model weights per model"):
             for jdx in range(len(self.data[idx])):
                 # iterate over layers:
                 for key in self.data[idx][jdx].keys():
@@ -448,9 +407,7 @@ class DatasetTokens(ModelDatasetBaseEpochs):
                         self.data[idx][jdx][key] = self.data[idx][jdx][key] / l2w
                         # normalize biases with l2w
                         if key.replace("weight", "bias") in self.data[idx][jdx]:
-                            self.data[idx][jdx][key.replace("weight", "bias")] = (
-                                self.data[idx][jdx][key.replace("weight", "bias")] / l2w
-                            )
+                            self.data[idx][jdx][key.replace("weight", "bias")] = self.data[idx][jdx][key.replace("weight", "bias")] / l2w
 
     ### map data to canoncial #############################################################################################
     def map_models_to_canonical(self):
@@ -467,7 +424,7 @@ class DatasetTokens(ModelDatasetBaseEpochs):
         ray.init(num_cpus=self.num_threads, num_gpus=0)
 
         ### gather data #############################################################################################
-        print(f"preparing computing canon form...")
+        print("preparing computing canon form...")
         pb = ProgressBar(total=len(self.data))
         pb_actor = pb.actor
 
@@ -512,7 +469,7 @@ class DatasetTokens(ModelDatasetBaseEpochs):
         ray.init(num_cpus=self.num_threads, num_gpus=0)
 
         ### gather data #############################################################################################
-        print(f"preparing computing canon form...")
+        print("preparing computing canon form...")
         pb = ProgressBar(total=len(self.data))
         pb_actor = pb.actor
 
@@ -541,18 +498,12 @@ def compute_single_canon_form(reference_model, data_curr, perm_spec, pba):
     # get second
     model_curr = data_curr[-1]
     # find permutation to match params_b to params_a
-    logging.debug(
-        f"compute canonical form: params a {type(reference_model)} params b {type(model_curr)}"
-    )
-    match_permutation = weight_matching(
-        ps=perm_spec, params_a=reference_model, params_b=model_curr
-    )
+    logging.debug(f"compute canonical form: params a {type(reference_model)} params b {type(model_curr)}")
+    match_permutation = weight_matching(ps=perm_spec, params_a=reference_model, params_b=model_curr)
     # apply permutation on all epochs
     for jdx in range(len(data_curr)):
         model_curr = data_curr[jdx]
-        model_curr_perm = apply_permutation(
-            ps=perm_spec, perm=match_permutation, params=model_curr
-        )
+        model_curr_perm = apply_permutation(ps=perm_spec, perm=match_permutation, params=model_curr)
         # put back in data
         data_curr[jdx] = model_curr_perm
 
@@ -571,9 +522,7 @@ def compute_single_rebasin(reference_check, data_curr, config, data_sample, pba)
     # load checkpoints
     model_a.model.load_state_dict(reference_check)
     # find permutation to match params_b to params_a
-    logging.debug(
-        f"compute canonical form: params a {type(reference_check)} params b {type(model_curr)}"
-    )
+    logging.debug(f"compute canonical form: params a {type(reference_check)} params b {type(model_curr)}")
     # todo
     input_data = data_sample
 
@@ -582,9 +531,7 @@ def compute_single_rebasin(reference_check, data_curr, config, data_sample, pba)
         check_curr = data_curr[jdx]
         # Rebasin
         model_b.model.load_state_dict(check_curr)
-        pcd = PermutationCoordinateDescent(
-            model_a, model_b, input_data
-        )  # weight-matching
+        pcd = PermutationCoordinateDescent(model_a, model_b, input_data)  # weight-matching
         pcd.rebasin()  # Rebasin model_b towards model_a. Automatically updates model_b
 
         # put back in data
