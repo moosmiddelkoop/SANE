@@ -41,13 +41,10 @@ logging.basicConfig(level=logging.INFO)
 # ---------------------------------------------------------------------------
 # Paths / config
 # ---------------------------------------------------------------------------
-TRIAL_DIR = Path(
-    "sane_pretraining/sane_mnist_smallcnnzoo/"
-    "AE_trainable_e550b_00000_0_2026-06-24_17-46-42"
-)
+TRIAL_DIR = Path("sane_pretraining/sane_mnist_smallcnnzoo/AE_trainable_e550b_00000_0_2026-06-24_17-46-42")
 OUT_DIR = Path("recall_prediction/epoch0-4-8")
 os.makedirs(OUT_DIR, exist_ok=True)
-CHECKPOINT = TRIAL_DIR / "checkpoint_000010" / "state.pt"   # latest available checkpoint
+CHECKPOINT = TRIAL_DIR / "checkpoint_000010" / "state.pt"  # latest available checkpoint
 ZOO_ROOT = Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/")
 RESULTS_JSON = OUT_DIR / "multivariate_mnist_smallcnnzoo_per_class_recall.json"
 
@@ -69,9 +66,7 @@ module = AEModule(config)
 
 checkpoint = torch.load(CHECKPOINT, map_location=device)
 # the trial was trained with model::compile=True, so keys carry an "_orig_mod." prefix
-state_dict = {
-    k.replace("_orig_mod.", ""): v for k, v in checkpoint["model"].items()
-}
+state_dict = {k.replace("_orig_mod.", ""): v for k, v in checkpoint["model"].items()}
 module.model.load_state_dict(state_dict)
 module.model.eval()
 
@@ -94,7 +89,7 @@ def build_split(split):
         permutation_spec=smallcnnzoo_permutation_spec(),
         map_to_canonical=True,
         standardize=True,
-        tokensize=config["ae:i_dim"],          # 145
+        tokensize=config["ae:i_dim"],  # 145
         train_val_test=split,
         ds_split=[0.7, 0.15, 0.15],
         weight_threshold=100,
@@ -120,7 +115,7 @@ ds_test = build_split("test")
 # ---------------------------------------------------------------------------
 logging.info("Fitting multivariate per-class recall head on SANE embeddings")
 dstk = DownstreamTaskLearner()
-result = dstk.eval_multivariate_regression(
+result = dstk.eval_per_class_recall_multivariate_regression(
     model=module,
     trainset=ds_train,
     testset=ds_test,
@@ -136,7 +131,7 @@ logging.info(f"Mean test R^2: {result['mean_r2_test']:.4f}")
 
 # --- baseline: same multivariate head on LayerQuintiles weight statistics ---
 logging.info("Fitting baseline (LayerQuintiles) per-class recall head")
-lq_result = dstk.eval_multivariate_regression(
+lq_result = dstk.eval_per_class_recall_multivariate_regression(
     model=LayerQuintiles(),
     trainset=ds_train,
     testset=ds_test,
