@@ -1,16 +1,24 @@
 # prepare data
+import logging
+import os
+
+# Single-threaded BLAS per worker: preprocessing parallelizes across CPUs via Ray
+# (many lightweight checkpoint-loading workers), so multi-threaded BLAS would
+# oversubscribe cores without helping the tiny per-model tensor ops. Must be set
+# before torch/numpy import.
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 from pathlib import Path
 
-from SANE.git_re_basin.git_re_basin import (
-    zoo_cnn_large_permutation_spec,
-)
+import torch
 
 from SANE.datasets.dataset_preprocessing import prepare_multiple_datasets
-from SANE.datasets.dataset_properties import PropertyDataset
 from SANE.datasets.dataset_sampling_preprocessed import PreprocessedSamplingDataset
-
-import logging
-import torch
+from SANE.git_re_basin.git_re_basin import smallcnnzoo_permutation_spec
 
 logging.basicConfig(level=logging.INFO)
 
@@ -57,13 +65,15 @@ logging.basicConfig(level=logging.INFO)
 
 def prep_data():
     dataset_target_path = [
-        Path("./dataset_cnn_cifar10_ep21-25_std/"),
+        Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist_preprocessed/"),
     ]
-    zoo_path = [  
-        Path("./tune_zoo_cifar10_uniform_large/").absolute()
-    ]
+    # mkdir target path if it does not exist
+    for path in dataset_target_path:
+        path.mkdir(parents=True, exist_ok=True)
+
+    zoo_path = [Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/").absolute()]
     zoo_path_and_permutation_spec_and_target_path = [
-        (zoo_path[0], zoo_cnn_large_permutation_spec, dataset_target_path[0]),
+        (zoo_path[0], smallcnnzoo_permutation_spec, dataset_target_path[0]),
     ]
     configurations = create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_fn=None)
     prepare_multiple_datasets(configurations=configurations)
@@ -84,19 +94,25 @@ def prep_data():
 
 def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_fn=None):
     # static parameters
-    epoch_list = [21, 22, 23, 24, 25]
+    epoch_list = [0, 1, 2, 3, 4, 5, 6, 7, 8]
     map_to_canonical = True
     standardize = True
     ds_split = [0.7, 0.15, 0.15]
-    max_samples = 10
-    weight_threshold = 100
-    num_threads = 5
+    max_samples = None  # for smoke tests (truncates the amount of models being preprocessed)
+    weight_threshold = 100  # drops any checkoint with blown up weights of a magnitude above this threshold
+    # use all CPU cores allocated to this job (respects the SLURM/cgroup allocation
+    # on Snellius); falls back to the full machine count when off-cluster
+    # try:
+    #     num_threads = len(os.sched_getaffinity(0))  # type: ignore[attr-defined]  # Linux-only
+    # except AttributeError:
+    #     num_threads = os.cpu_count()
+    num_threads = 12
     shuffle_path = True
-    windowsize = 64
-    supersample = 3
+    windowsize = 58
+    supersample = 1
     precision = "32"
     ignore_bn = True
-    tokensize = 0  #discover tokensize
+    tokensize = 145
 
     # permutation spec
     permutation_number_train = 200
@@ -146,7 +162,7 @@ def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_
                     "filter_fn": filter_fn,
                 }
             )
-    
+
     return configurations
 
 

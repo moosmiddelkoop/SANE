@@ -3,14 +3,12 @@ Code adapted from https://github.com/themrzmaster/git-re-basin-pytorch
 Addition in weight matching for non-fitting weight matrices and permutations in get_permuted_param
 """
 
+import logging
 from collections import defaultdict
-from re import L
 from typing import NamedTuple
 
 import torch
 from scipy.optimize import linear_sum_assignment
-
-import logging
 
 
 class PermutationSpec(NamedTuple):
@@ -77,19 +75,11 @@ def apply_permutation(ps: PermutationSpec, perm, params):
     return {k: get_permuted_param(ps, perm, k, params) for k in params.keys()}
 
 
-def weight_matching(
-    ps: PermutationSpec, params_a, params_b, max_iter=100, init_perm=None
-):
+def weight_matching(ps: PermutationSpec, params_a, params_b, max_iter=100, init_perm=None):
     """Find a permutation of `params_b` to make them match `params_a`."""
-    perm_sizes = {
-        p: params_a[axes[0][0]].shape[axes[0][1]] for p, axes in ps.perm_to_axes.items()
-    }
+    perm_sizes = {p: params_a[axes[0][0]].shape[axes[0][1]] for p, axes in ps.perm_to_axes.items()}
 
-    perm = (
-        {p: torch.arange(n) for p, n in perm_sizes.items()}
-        if init_perm is None
-        else init_perm
-    )
+    perm = {p: torch.arange(n) for p, n in perm_sizes.items()} if init_perm is None else init_perm
     perm_names = list(perm.keys())
 
     for iteration in range(max_iter):
@@ -152,12 +142,9 @@ def mlp_permutation_spec(num_hidden_layers: int) -> PermutationSpec:
     return permutation_spec_from_axes_to_perm(
         {
             "layer0.weight": ("P_0", None),
-            **{
-                f"layer{i}.weight": (f"P_{i}", f"P_{i-1}")
-                for i in range(1, num_hidden_layers)
-            },
+            **{f"layer{i}.weight": (f"P_{i}", f"P_{i - 1}") for i in range(1, num_hidden_layers)},
             **{f"layer{i}.bias": (f"P_{i}",) for i in range(num_hidden_layers)},
-            f"layer{num_hidden_layers}.weight": (None, f"P_{num_hidden_layers-1}"),
+            f"layer{num_hidden_layers}.weight": (None, f"P_{num_hidden_layers - 1}"),
             f"layer{num_hidden_layers}.bias": (None,),
         }
     )
@@ -223,6 +210,53 @@ def zoo_cnn_large_permutation_spec() -> PermutationSpec:
     )
 
 
+def smallcnnzoo_permutation_spec() -> PermutationSpec:
+    """Permutation spec for the Unterthiner et al. "Small CNN Zoo" architecture
+    (https://github.com/google-research/google-research/tree/master/dnn_predict_accuracy).
+
+    For each tensor, the spec writes a tuple with one slot per axis: "which shuffle controls this axis?" (None if no shuffle happens).put channels are not permuted by any shuffle (they are the first axis of the next conv's weight, which is controlled by P_bg1).
+    """
+    conv = (
+        lambda name, p_in, p_out, bias=True: {
+            f"{name}.weight": (p_out, p_in, None, None),
+            f"{name}.bias": (p_out,),
+        }
+        if bias
+        else {f"{name}.weight": (p_out, p_in, None, None)}
+    )
+    dense = (
+        lambda name, p_in, p_out, bias=True: {
+            f"{name}.weight": (p_out, p_in),
+            f"{name}.bias": (p_out,),
+        }
+        if bias
+        else {f"{name}.weight": (p_out, p_in)}
+    )
+
+    return permutation_spec_from_axes_to_perm(
+        {
+            **conv("conv1", None, "P_conv0"),
+            **conv("conv2", "P_conv0", "P_conv1"),
+            **conv("conv3", "P_conv1", "P_conv2"),
+            **dense("dense", "P_conv2", None),
+        }
+    )
+
+    # Non: efficient version for clarity:
+    # return permutation_spec_from_axes_to_perm(
+    #     {
+    #         "conv1.weight": ("P_conv0", None, None, None),
+    #         "conv1.bias": ("P_conv0",),
+    #         "conv2.weight": ("P_conv1", "P_conv0", None, None),
+    #         "conv2.bias": ("P_conv1",),
+    #         "conv3.weight": ("P_conv2", "P_conv1", None, None),
+    #         "conv3.bias": ("P_conv2",),
+    #         "dense.weight": (None, "P_conv2"),
+    #         "dense.bias": (None,),
+    #     }
+    # )
+
+
 def MiniAlexNet_permutation_spec(batchnorm=True) -> PermutationSpec:
     #  incomplete - lacking batchnorm layers. for diagnostics use only.
     conv = (
@@ -256,9 +290,9 @@ def MiniAlexNet_permutation_spec(batchnorm=True) -> PermutationSpec:
     return permutation_spec_from_axes_to_perm(
         {
             **conv("conv1", None, "P_bg0"),
-            **norm(f"batchnorm1", "P_bg0", batchnorm),
+            **norm("batchnorm1", "P_bg0", batchnorm),
             **conv("conv2", "P_bg0", "P_bg1"),
-            **norm(f"batchnorm2", "P_bg1", batchnorm),
+            **norm("batchnorm2", "P_bg1", batchnorm),
             **dense("fc1", "P_bg1", "P_bg2"),
             **dense("fc2", "P_bg2", "P_bg3"),
             **dense("fc3", "P_bg3", None),
@@ -306,15 +340,11 @@ def resnet18_permutation_spec(batchnorm=True, match_last=True) -> PermutationSpe
     easyblock = (
         lambda name, p, bn=True: {
             **conv(f"{name}.conv1", p, f"P_{name}_inner"),
-            **norm(
-                f"{name}.bn1", f"P_{name}_inner", True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.bn1", f"P_{name}_inner", True),  # BN layers have to mirror output perm of previous conv
             **conv(
                 f"{name}.conv2", f"P_{name}_inner", p
             ),  # output of last convolution is constrained to input due to residual connnection
-            **norm(
-                f"{name}.bn2", p, True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.bn2", p, True),  # BN layers have to mirror output perm of previous conv
         }
         if bn
         else {
@@ -490,15 +520,11 @@ def resnet34_permutation_spec(batchnorm=True, match_last=True) -> PermutationSpe
     easyblock = (
         lambda name, p, bn=True: {
             **conv(f"{name}.conv1", p, f"P_{name}_inner"),
-            **norm(
-                f"{name}.bn1", f"P_{name}_inner", True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.bn1", f"P_{name}_inner", True),  # BN layers have to mirror output perm of previous conv
             **conv(
                 f"{name}.conv2", f"P_{name}_inner", p
             ),  # output of last convolution is constrained to input due to residual connnection
-            **norm(
-                f"{name}.bn2", p, True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.bn2", p, True),  # BN layers have to mirror output perm of previous conv
         }
         if bn
         else {
@@ -647,21 +673,15 @@ def resnet50_permutation_spec(batchnorm=True, match_last=True) -> PermutationSpe
     easyblock = (
         lambda name, p, bn=True: {
             **conv(f"{name}.conv1", p, f"P_{name}_inner1"),
-            **norm(
-                f"{name}.bn1", f"P_{name}_inner1", True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.bn1", f"P_{name}_inner1", True),  # BN layers have to mirror output perm of previous conv
             **conv(
                 f"{name}.conv2", f"P_{name}_inner1", f"P_{name}_inner2"
             ),  # output of last convolution is constrained to input due to residual connnection
-            **norm(
-                f"{name}.bn2", f"P_{name}_inner2", True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.bn2", f"P_{name}_inner2", True),  # BN layers have to mirror output perm of previous conv
             **conv(
                 f"{name}.conv3", f"P_{name}_inner2", p
             ),  # output of last convolution is constrained to input due to residual connnection
-            **norm(
-                f"{name}.bn3", p, True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.bn3", p, True),  # BN layers have to mirror output perm of previous conv
         }
         if bn
         else {
@@ -811,21 +831,15 @@ def resnet101_permutation_spec(batchnorm=True, match_last=True) -> PermutationSp
     easyblock = (
         lambda name, p, bn=True: {
             **conv(f"{name}.conv1", p, f"P_{name}_inner1"),
-            **norm(
-                f"{name}.bn1", f"P_{name}_inner1", True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.bn1", f"P_{name}_inner1", True),  # BN layers have to mirror output perm of previous conv
             **conv(
                 f"{name}.conv2", f"P_{name}_inner1", f"P_{name}_inner2"
             ),  # output of last convolution is constrained to input due to residual connnection
-            **norm(
-                f"{name}.bn2", f"P_{name}_inner2", True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.bn2", f"P_{name}_inner2", True),  # BN layers have to mirror output perm of previous conv
             **conv(
                 f"{name}.conv3", f"P_{name}_inner2", p
             ),  # output of last convolution is constrained to input due to residual connnection
-            **norm(
-                f"{name}.bn3", p, True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.bn3", p, True),  # BN layers have to mirror output perm of previous conv
         }
         if bn
         else {
@@ -1009,21 +1023,15 @@ def resnet152_permutation_spec(batchnorm=True, match_last=True) -> PermutationSp
     easyblock = (
         lambda name, p, bn=True: {
             **conv(f"{name}.conv1", p, f"P_{name}_inner1"),
-            **norm(
-                f"{name}.bn1", f"P_{name}_inner1", True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.bn1", f"P_{name}_inner1", True),  # BN layers have to mirror output perm of previous conv
             **conv(
                 f"{name}.conv2", f"P_{name}_inner1", f"P_{name}_inner2"
             ),  # output of last convolution is constrained to input due to residual connnection
-            **norm(
-                f"{name}.bn2", f"P_{name}_inner2", True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.bn2", f"P_{name}_inner2", True),  # BN layers have to mirror output perm of previous conv
             **conv(
                 f"{name}.conv3", f"P_{name}_inner2", p
             ),  # output of last convolution is constrained to input due to residual connnection
-            **norm(
-                f"{name}.bn3", p, True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.bn3", p, True),  # BN layers have to mirror output perm of previous conv
         }
         if bn
         else {
@@ -1239,13 +1247,9 @@ def wide_resnet_permutation_spec(batchnorm=True, match_last=True) -> Permutation
 
     easyblock = (
         lambda name, p, bn=True: {
-            **norm(
-                f"{name}.bn1", p, True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.bn1", p, True),  # BN layers have to mirror output perm of previous conv
             **conv(f"{name}.conv1", p, f"P_{name}_inner"),
-            **norm(
-                f"{name}.bn2", f"P_{name}_inner", True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.bn2", f"P_{name}_inner", True),  # BN layers have to mirror output perm of previous conv
             **conv(
                 f"{name}.conv2", f"P_{name}_inner", p
             ),  # output of last convolution is constrained to input due to residual connnection
@@ -1394,10 +1398,7 @@ def vgg16_permutation_spec() -> PermutationSpec:
                 )
                 for i in range(len(layers_with_bn))
             },
-            **{
-                f"features.{layers_with_bn[i]}.num_batches_tracked": ()
-                for i in range(len(layers_with_bn))
-            },
+            **{f"features.{layers_with_bn[i]}.num_batches_tracked": () for i in range(len(layers_with_bn))},
             **dense("classifier", "P_Conv_40", "P_Dense_0", False),
         }
     )
@@ -1443,15 +1444,11 @@ def mobilenet_permutation_spec(batchnorm=True) -> PermutationSpec:
     easyblock2l = (
         lambda name, p, bn=True: {
             **conv(f"{name}.conv.0.0", p, f"P_{name}_inner"),
-            **norm(
-                f"{name}.conv.0.1", f"P_{name}_inner", True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.conv.0.1", f"P_{name}_inner", True),  # BN layers have to mirror output perm of previous conv
             **conv(
                 f"{name}.conv.1", f"P_{name}_inner", p
             ),  # output of last convolution is constrained to input due to residual connnection
-            **norm(
-                f"{name}.conv.2", p, True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.conv.2", p, True),  # BN layers have to mirror output perm of previous conv
         }
         if bn
         else {
@@ -1463,21 +1460,15 @@ def mobilenet_permutation_spec(batchnorm=True) -> PermutationSpec:
     easyblock3l = (
         lambda name, p, bn=True: {
             **conv(f"{name}.conv.0.0", p, f"P_{name}_inner1"),
-            **norm(
-                f"{name}.conv.0.1", f"P_{name}_inner1", True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.conv.0.1", f"P_{name}_inner1", True),  # BN layers have to mirror output perm of previous conv
             **conv(
                 f"{name}.conv.1.0", f"P_{name}_inner1", f"P_{name}_inner2"
             ),  # output of last convolution is constrained to input due to residual connnection
-            **norm(
-                f"{name}.conv.1.1", f"P_{name}_inner2", True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.conv.1.1", f"P_{name}_inner2", True),  # BN layers have to mirror output perm of previous conv
             **conv(
                 f"{name}.conv.2", f"P_{name}_inner2", p
             ),  # output of last convolution is constrained to input due to residual connnection
-            **norm(
-                f"{name}.conv.3", p, True
-            ),  # BN layers have to mirror output perm of previous conv
+            **norm(f"{name}.conv.3", p, True),  # BN layers have to mirror output perm of previous conv
         }
         if bn
         else {

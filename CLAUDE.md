@@ -2,21 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## General rules
+BE MINIMALIST. I like the code to be as lightweight as possible
+
 ## Project
 
 SANE (Sequential Autoencoder for Neural Embeddings) — research code for the ICML 2024 paper "Towards Scalable and Versatile Weight Space Learning". The package learns task-agnostic representations of neural network *weights* by tokenizing model weights and training a transformer autoencoder over those token sequences. Downstream uses: predicting model properties (test_acc, ggap, epoch) and generating/finetuning new models from sampled embeddings.
 
-## Setup & Commands
-
-Install (uses `uv`, per global convention):
-```bash
-bash install.sh   # uv pip install -e .  +  ray==2.6.1, pyarrow, imageio
-```
-
-Run any script with `uv run` rather than `python` (per global convention). For example:
-```bash
-uv run experiments/resnet18-cifar100/pretrain_sane_cifar100_resnet18.py
-```
+The accompanying paper can be found in `paper/` (both .tex source, .md and .pdf versions). I am trying to use SANE for my weight space unlearning work (see paper in `CNNZoo_surgery_ICML2026-13.pdf`), but that code is not yet in this repo.
 
 Tests use pytest (configured in `setup.cfg` with `--cov SANE`); however `tests/` is not present in the repo, so there is currently no test suite to run.
 
@@ -28,7 +21,7 @@ The pipeline is **always**: download a model zoo → preprocess into tokenized t
 
 ### 1. Data: model zoos → tokenized datasets
 - Zoo download scripts live in `data/` (`download_*.sh`). The CIFAR-10 CNN sample is the smallest and is what the quick-start notebook uses.
-- Preprocessing scripts (`data/preprocess_dataset_*.py`) convert a zoo of checkpoints into a `dataset.pt` containing `{"trainset", "valset", "testset"}` of `PreprocessedSamplingDataset`. Key concepts the preprocessor needs:
+- Preprocessing scripts (`data/preprocess_dataset_*.py`) convert a zoo of checkpoints into a consolidated `dataset.pt` containing `{"trainset", "valset", "testset"}` of `TensorSamplingDataset` (all samples stacked into in-RAM tensors; one sequential read at training time) via `SANE.datasets.dataset_preprocessing_consolidated`. The original variant (`dataset_preprocessing.py`: per-sample `.pt` files in `dataset_torch.{split}/` dirs, wrapped by path-based `PreprocessedSamplingDataset`) still exists — switch the entry script's import to use it. Legacy per-sample zoos can be converted with `data/consolidate_preprocessed.py`. Key concepts the preprocessor needs:
   - **Permutation spec** (`SANE.git_re_basin.git_re_basin`): describes which weights can be permuted together for the architecture. Use `zoo_cnn_permutation_spec` / `zoo_cnn_large_permutation_spec` / `resnet18_permutation_spec`.
   - **Tokensize / windowsize**: weights are sliced into fixed-size tokens; `windowsize` is the number of tokens per sample. `tokensize=0` means "infer".
   - **Standardize / map_to_canonical**: standardize tokens, and remap permutation-equivalent models to a canonical form for the contrastive objective.
@@ -63,3 +56,5 @@ The pipeline is **always**: download a model zoo → preprocess into tokenized t
 - **Ray is mandatory** for pretraining and downstream sampling, even for single-trial runs. CPU/thread env vars are set at the top of every entry script.
 - **`.gitignore` excludes `*.pt`, `*.json`, and `/experiments`.** Generated checkpoints, dataset dumps, and result JSONs won't show up in `git status`. Don't be surprised that scripts read/write files that aren't tracked.
 - **`install.sh` is currently modified** (per recent git status) — check before running it that it still does the right thing.
+- **Downstream encoding must match pretraining preprocessing.** Property-prediction and sampling scripts also load checkpoints through `DatasetTokens` and re-apply `map_to_canonical`, the permutation spec, `ignore_bn`, and the standardization stats before encoding. These must match the values used at preprocessing time — otherwise the embeddings will be off-distribution and downstream metrics will silently degrade. The epoch list itself is *not* part of this constraint (it just picks which checkpoints to encode), but every other preprocessing param is.
+- **Epoch list convention (cnn-cifar10): stride-5 sweep `[5, 10, …, 50]`.** This repo's other preprocess scripts use either a single late epoch (`[60]`) or a tight late-window (`[21..25]`). The CNN-CIFAR10 preprocessing in `data/preprocess_dataset_cnn_cifar10.py` deliberately deviates from both — it samples 10 checkpoints across the full training trajectory at stride 5. The motivation is the weight-space *unlearning* downstream use case: unlearning perturbs a converged model and can push it off the converged manifold towards earlier-training-like states, and we want SANE embeddings to remain trustworthy over that broader region (a "high trust region" spanning the training trajectory, not just the converged endpoint). For purely converged-state work this is overkill; for unlearning / model-editing work it is the right shape.

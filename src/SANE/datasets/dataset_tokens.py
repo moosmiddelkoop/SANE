@@ -57,7 +57,7 @@ class DatasetTokens(ModelDatasetBaseEpochs):
         train_val_test="train",
         ds_split=[0.7, 0.3],
         weight_threshold: float = float("inf"),
-        max_samples: int = 0,  # limit the number of models to integer number (full model trajectory, all epochs)
+        max_samples: Optional[int] = 0,  # limit the number of models to integer number (full model trajectory, all epochs)
         filter_function=None,  # gets sample path as argument and returns True if model needs to be filtered out
         property_keys=None,
         shuffle_path: bool = True,
@@ -464,7 +464,7 @@ class DatasetTokens(ModelDatasetBaseEpochs):
         reference_model = self.reference_checkpoint
 
         ## init multiprocessing environment ############
-        ray.init(num_cpus=self.num_threads)
+        ray.init(num_cpus=self.num_threads, num_gpus=0)
 
         ### gather data #############################################################################################
         print(f"preparing computing canon form...")
@@ -509,7 +509,7 @@ class DatasetTokens(ModelDatasetBaseEpochs):
         data_sample = torch.stack(s1[0], s2[0])
 
         ## init multiprocessing environment ############
-        ray.init(num_cpus=self.num_threads)
+        ray.init(num_cpus=self.num_threads, num_gpus=0)
 
         ### gather data #############################################################################################
         print(f"preparing computing canon form...")

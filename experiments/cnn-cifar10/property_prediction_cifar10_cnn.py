@@ -42,7 +42,7 @@ module = AEModule(config)
 checkpoint = torch.load(
     model_path.joinpath("checkpoint_000100/state.pt"), map_location=device
 )
-module.model.load_state_dict(checkpoint["model"])
+module.model.load_state_dict(checkpoint["model"]) # will this go alright? with the compile stuff
 
 # %%
 permutation_spec = zoo_cnn_large_permutation_spec()
@@ -172,7 +172,7 @@ ds_train = torch.load(ds_path.joinpath("dataset_train.pt"))
 ds_test = torch.load(ds_path.joinpath("dataset_test.pt"))
 ds_val = torch.load(ds_path.joinpath("dataset_val.pt"))
 
-%%
+# %%
 ## Baseline 1: lq
 logging.info("compute LQ baseline")
 dstk = DownstreamTaskLearner()
@@ -191,7 +191,7 @@ performance_lq["method"] = "lq"
 update_json_with_results(results_json_path, performance_lq)
 
 
-%%
+# %%
 # AE
 logging.info("compute AE performance")
 

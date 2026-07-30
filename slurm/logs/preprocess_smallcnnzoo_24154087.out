@@ -1,0 +1,45 @@
+=== Starting preprocessing ===
+INFO:root:load train dataset
+INFO:root:Load token dataset
+INFO:root:reference checkpoint found at /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_1782
+2026-06-23 18:07:50,543	INFO worker.py:1621 -- Started a local Ray instance.
+INFO:root:loading checkpoints from [PosixPath('/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist')]
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_8/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_7/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_6/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_5/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_4/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_3/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_2/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_1/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_0/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_8/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_7/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_6/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_5/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_4/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_3/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_2/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_1/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_0/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_1782/checkpoint_8/checkpoints
+[2m[36m(load_checkpoints_remote pid=2673886)[0m try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_8/checkpoints
+[2m[36m(load_checkpoints_remote pid=2673886)[0m try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_1782/checkpoint_1/checkpoints
+[2m[36m(load_checkpoints_remote pid=2673886)[0m try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_550/checkpoint_0/checkpoints
+[2m[36m(load_checkpoints_remote pid=2673886)[0m try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_550/checkpoint_1/checkpoints
+[2m[36m(load_checkpoints_remote pid=2673886)[0m try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_22345/checkpoint_1/checkpoints
+[2m[36m(load_checkpoints_remote pid=2673894)[0m 
+[2m[36m(load_checkpoints_remote pid=2673886)[0m try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_2840/checkpoint_5/checkpoints[32m [repeated 2870x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/ray-logging.html#log-deduplication for more options.)[0m
+[2m[36m(load_checkpoints_remote pid=2673886)[0m try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_5409/checkpoint_4/checkpoints[32m [repeated 3208x across cluster][0m
+[2m[36m(load_checkpoints_remote pid=2673886)[0m try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24214/checkpoint_2/checkpoints[32m [repeated 3456x across cluster][0m
+[2m[36m(load_checkpoints_remote pid=2673899)[0m 
+[2m[36m(load_checkpoints_remote pid=2673886)[0m try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_5132/checkpoint_5/checkpoints[32m [repeated 3375x across cluster][0m
+[2m[36m(load_checkpoints_remote pid=2673889)[0m 
+[2m[36m(load_checkpoints_remote pid=2673886)[0m try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_25724/checkpoint_0/checkpoints[32m [repeated 3790x across cluster][0m
+[2m[36m(load_checkpoints_remote pid=2673899)[0m try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_29625/checkpoint_7/checkpoints[32m [repeated 3647x across cluster][0m
+[2m[36m(load_checkpoints_remote pid=2673886)[0m try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_27608/checkpoint_4/checkpoints[32m [repeated 3787x across cluster][0m
+[2m[36m(load_checkpoints_remote pid=2673888)[0m try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_13839/checkpoint_6/checkpoints[32m [repeated 3821x across cluster][0m
+[2m[36m(load_checkpoints_remote pid=2673886)[0m 
+[2m[36m(load_checkpoints_remote pid=2673886)[0m try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_23819/checkpoint_7/checkpoints[32m [repeated 4049x across cluster][0m
+[2m[36m(load_checkpoints_remote pid=2673886)[0m try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_2354/checkpoint_0/checkpoints[32m [repeated 3981x across cluster][0m
+  0%|          | 0/188973 [00:00<?, ?it/s] 19%|█▉        | 36175/188973 [00:00<00:00, 361157.93it/s] 28%|██▊       | 52836/188973 [00:19<00:00, 361157.93it/s] 28%|██▊       | 52838/188973 [00:20<01:04, 2102.11it/s]   28%|██▊       | 52923/188973 [00:20<01:05, 2092.00it/s]

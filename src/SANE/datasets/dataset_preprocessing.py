@@ -1,25 +1,21 @@
+import json
+import logging
 import os
-
-from typing import Union, List, Tuple, Dict, Any
-
 from pathlib import Path
+from typing import Any, Dict, List, Union
 
+import torch
+from torch.utils.data import DataLoader
+from tqdm import tqdm
 
-from SANE.datasets.dataset_tokens import DatasetTokens
 from SANE.datasets.augmentations import (
     CheckpointAugmentationPipeline,
 )
-
+from SANE.datasets.dataset_tokens import DatasetTokens
 from SANE.git_re_basin.git_re_basin import (
     PermutationSpec,
 )
 
-import logging
-
-import json
-
-import torch
-from torch.utils.data import DataLoader
 
 def prepare_multiple_datasets(configurations: List[Dict[str, Any]]):
     """
@@ -68,25 +64,30 @@ def prepare_multiple_datasets(configurations: List[Dict[str, Any]]):
             drop_pt_dataset=config.get("drop_pt_dataset", False),
         )
 
+
 # Save function using torch
 def save_torch_sample(index, ddx, mask, pos, props, output_dir):
     file_path = os.path.join(output_dir, f"sample_{index}.pt")
     torch.save({"w": ddx, "m": mask, "p": pos, "props": props}, file_path)
 
 
-def save_dataset(dataset, output_dir):
-    # Create a DataLoader
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
+def save_dataset(dataset, output_dir, num_workers=0):
+    # Create a DataLoader. num_workers parallelizes the per-sample work in
+    # __getitem__ (git-re-basin permutation + tokenization), which is the
+    # bottleneck here; the file writes themselves stay in the main process.
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=num_workers)
 
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
 
-    for index, (ddx, mask, pos, props) in enumerate(dataloader):
-        # remove batch dimension 
+    logging.info(f"Number of files to be written: {len(dataloader)}")
+    for index, (ddx, mask, pos, props) in tqdm(enumerate(dataloader), total=len(dataloader)):
+        # remove batch dimension
         ddx, mask, pos, props = ddx.squeeze(0), mask.squeeze(0), pos.squeeze(0), props.squeeze(0)
         save_torch_sample(index, ddx, mask, pos, props, output_dir)
 
     logging.info(f"All samples have been saved to {output_dir}")
+
 
 def prepare_dataset(
     dataset_target_path: Union[str, Path],
@@ -112,7 +113,7 @@ def prepare_dataset(
     shuffle_path: bool = True,
     windowsize: int = 160,
     supersample: Union[str, int] = "auto",
-    precision: int = 16,
+    precision: str = "16",
     ignore_bn: bool = True,
     tokensize: int = 576,
     permutation_number_train: int = 0,
@@ -155,16 +156,8 @@ def prepare_dataset(
 
     for split_key in splits:
         logging.info(f"load {split_key} dataset")
-        permutation_number = (
-            permutation_number_train
-            if split_key == "train"
-            else permutation_number_test
-        )
-        permutations_per_sample = (
-            permutations_per_sample_train
-            if split_key == "train"
-            else permutations_per_sample_test
-        )
+        permutation_number = permutation_number_train if split_key == "train" else permutation_number_test
+        permutations_per_sample = permutations_per_sample_train if split_key == "train" else permutations_per_sample_test
         preprocess_single_split(
             dataset_target_path=dataset_target_path,
             zoo_path=zoo_path,
@@ -277,8 +270,8 @@ def preprocess_single_split(
         precision=precision,
         filter_function=filter_fn,  # gets sample path as argument and returns True if model needs to be filtered out
         property_keys=property_keys,
-        num_threads=12,
-        shuffle_path=True,
+        num_threads=num_threads,  # these were hardcoded before (to 12)
+        shuffle_path=shuffle_path,  # these were hardcoded before (to True)
         verbosity=3,
         mode="checkpoint",  # apply permutation on checkpoint
         getitem="tokens+props",
@@ -334,7 +327,7 @@ def preprocess_single_split(
     write_path = Path(dataset_target_path).joinpath(f"dataset_torch.{split}")
     logging.info(f"write_path: {write_path}")
 
-    save_dataset(dataset, write_path)
+    save_dataset(dataset, write_path, num_workers=num_threads)
 
     # get metadata and write to disk
     # get full sample and infer dimensions
@@ -389,8 +382,5 @@ def preprocess_single_split(
         norm_mode = None
     layer_norms["mode"] = norm_mode
     # add info json to the same path
-    json_path = Path(dataset_target_path).joinpath(
-        f"dataset_normalization_{split}.json"
-    )
+    json_path = Path(dataset_target_path).joinpath(f"dataset_normalization_{split}.json")
     json.dump(layer_norms, json_path.open("w"))
-

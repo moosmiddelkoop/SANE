@@ -1,0 +1,55 @@
+=== Starting preprocessing ===
+INFO:root:load train dataset
+INFO:root:Load token dataset
+INFO:root:reference checkpoint found at /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_1782
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_8/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_7/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_6/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_5/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_4/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_3/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_2/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_1/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_3148/checkpoint_0/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_8/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_7/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_6/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_5/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_4/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_3/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_2/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_1/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_24739/checkpoint_0/checkpoints
+try to load checkpoint from /projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/NN_unthi_mnist_11169528_1782/checkpoint_8/checkpoints
+Traceback (most recent call last):
+  File "/gpfs/home1/mmiddelkoop/SANE/data/preprocess_dataset_cnn_cifar10.py", line 169, in <module>
+    prep_data()
+  File "/gpfs/home1/mmiddelkoop/SANE/data/preprocess_dataset_cnn_cifar10.py", line 79, in prep_data
+    prepare_multiple_datasets(configurations=configurations)
+  File "/gpfs/home1/mmiddelkoop/SANE/src/SANE/datasets/dataset_preprocessing.py", line 29, in prepare_multiple_datasets
+    prepare_dataset(
+  File "/gpfs/home1/mmiddelkoop/SANE/src/SANE/datasets/dataset_preprocessing.py", line 159, in prepare_dataset
+    preprocess_single_split(
+  File "/gpfs/home1/mmiddelkoop/SANE/src/SANE/datasets/dataset_preprocessing.py", line 258, in preprocess_single_split
+    dataset = DatasetTokens(
+  File "/gpfs/home1/mmiddelkoop/SANE/src/SANE/datasets/dataset_tokens.py", line 73, in __init__
+    super().__init__(
+  File "/gpfs/home1/mmiddelkoop/SANE/src/SANE/datasets/dataset_epochs.py", line 153, in __init__
+    ray.init(num_cpus=num_threads)
+  File "/gpfs/home1/mmiddelkoop/SANE/.venv/lib64/python3.9/site-packages/ray/_private/client_mode_hook.py", line 103, in wrapper
+    return func(*args, **kwargs)
+  File "/gpfs/home1/mmiddelkoop/SANE/.venv/lib64/python3.9/site-packages/ray/_private/worker.py", line 1514, in init
+    _global_node = ray._private.node.Node(
+  File "/gpfs/home1/mmiddelkoop/SANE/.venv/lib64/python3.9/site-packages/ray/_private/node.py", line 290, in __init__
+    self.start_ray_processes()
+  File "/gpfs/home1/mmiddelkoop/SANE/.venv/lib64/python3.9/site-packages/ray/_private/node.py", line 1214, in start_ray_processes
+    resource_spec = self.get_resource_spec()
+  File "/gpfs/home1/mmiddelkoop/SANE/.venv/lib64/python3.9/site-packages/ray/_private/node.py", line 459, in get_resource_spec
+    self._resource_spec = ResourceSpec(
+  File "/gpfs/home1/mmiddelkoop/SANE/.venv/lib64/python3.9/site-packages/ray/_private/resource_spec.py", line 186, in resolve
+    num_gpus = _autodetect_num_gpus()
+  File "/gpfs/home1/mmiddelkoop/SANE/.venv/lib64/python3.9/site-packages/ray/_private/resource_spec.py", line 289, in _autodetect_num_gpus
+    gpu_list = GPUtil.getGPUs()
+  File "/gpfs/home1/mmiddelkoop/SANE/.venv/lib64/python3.9/site-packages/GPUtil/GPUtil.py", line 102, in getGPUs
+    deviceIds = int(vals[i])
+ValueError: invalid literal for int() with base 10: "NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver. Make sure that the latest NVIDIA driver is installed and running."

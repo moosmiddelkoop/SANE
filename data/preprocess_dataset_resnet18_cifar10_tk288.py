@@ -57,10 +57,10 @@ logging.basicConfig(level=logging.INFO)
 
 def prep_data():
     dataset_target_path = [
-        Path("./dataset_resnet18_cifar10_token_288_ep21-25_std/"),
+        Path("scratch-shared/mmiddelkoop/SANE/data/dataset_resnet18_cifar10_token_288_ep21-25_std/"),
     ]
     zoo_path = [  
-        Path("./cifar10_resnet18_kaiming_uniform/").absolute()
+        Path("scratch-shared/mmiddelkoop/SANE/data/cifar10_resnet18_kaiming_uniform/").absolute()
     ]
     zoo_path_and_permutation_spec_and_target_path = [
         (zoo_path[0], resnet18_permutation_spec, dataset_target_path[0]),

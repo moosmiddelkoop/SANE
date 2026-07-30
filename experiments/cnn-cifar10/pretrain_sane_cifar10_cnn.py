@@ -4,35 +4,20 @@ logging.basicConfig(level=logging.INFO)
 
 import os
 
-# set environment variables to limit cpu usage
-os.environ["OMP_NUM_THREADS"] = "4"  # export OMP_NUM_THREADS=4
-os.environ["OPENBLAS_NUM_THREADS"] = "4"  # export OPENBLAS_NUM_THREADS=4
-os.environ["MKL_NUM_THREADS"] = "6"  # export MKL_NUM_THREADS=6
-os.environ["VECLIB_MAXIMUM_THREADS"] = "4"  # export VECLIB_MAXIMUM_THREADS=4
-os.environ["NUMEXPR_NUM_THREADS"] = "6"  # export NUMEXPR_NUM_THREADS=6
-
-import torch
-
-import ray
-from ray import tune
-
-from ray.air.integrations.wandb import WandbLoggerCallback
-from SANE.evaluation.ray_fine_tuning_callback import CheckpointSamplingCallback
-from SANE.evaluation.ray_fine_tuning_callback_subsampled import (
-    CheckpointSamplingCallbackSubsampled,
-)
-from SANE.evaluation.ray_fine_tuning_callback_bootstrapped import (
-    CheckpointSamplingCallbackBootstrapped,
-)
-
-import json
+# Snellius A100 node: 18 CPU cores per GPU. With 8 DataLoader workers + 1 main
+# process, 2 BLAS threads each saturates the allocation without oversubscription.
+os.environ["OMP_NUM_THREADS"] = "2"
+os.environ["OPENBLAS_NUM_THREADS"] = "2"
+os.environ["MKL_NUM_THREADS"] = "2"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "2"
+os.environ["NUMEXPR_NUM_THREADS"] = "2"
 
 from pathlib import Path
 
+import ray
+import torch
 
 from SANE.models.def_AE_trainable import AE_trainable
-from SANE.datasets.dataset_sampling_preprocessed import PreprocessedSamplingDataset
-
 
 PATH_ROOT = Path("./")
 
@@ -41,7 +26,7 @@ def main():
     ### set experiment resources ####
     print(f"torch.cuda.is_available: {torch.cuda.is_available()}")
     # ray init to limit memory and storage
-    cpus_per_trial = 10
+    cpus_per_trial = 18
     gpus_per_trial = 1
     gpus = 1
     cpus = gpus * cpus_per_trial
@@ -66,7 +51,6 @@ def main():
 
     # permutation specs
     config["training::permutation_number"] = 5
-    config["training::view_2_canon"] = False
     config["training::view_2_canon"] = True
     config["testing::permutation_number"] = 5
     config["testing::view_1_canon"] = True
@@ -77,7 +61,7 @@ def main():
     config["ae:i_dim"] = 289
     config["ae:lat_dim"] = 128
     config["ae:max_positions"] = [100, 10, 40]
-    config["training::windowsize"] = 64
+    config["training::windowsize"] = 93
     config["ae:d_model"] = 1024
     config["ae:nhead"] = 8
     config["ae:num_layers"] = 8
@@ -96,7 +80,7 @@ def main():
     # AMP
     #
     config["training::epochs_train"] = 50
-    config["training::output_epoch"] = 25
+    config["training::output_epoch"] = 5
     config["training::test_epochs"] = 1
 
     config["monitor_memory"] = True
@@ -111,7 +95,7 @@ def main():
     ###### Datasets ###########################################################################
     # pre-compute dataset and drop in torch.save
     # data_path = output_dir.joinpath(experiment_name)
-    data_path = Path("../../data/dataset_cnn_cifar10_sample_ep21-25_std/")
+    data_path = Path("/scratch-shared/mmiddelkoop/SANE/data/dataset_cnn_cifar10_ep10-50_std_93tok/")
     data_path.mkdir(exist_ok=True)
     # path to ffcv dataset for training
     config["dataset::dump"] = data_path.joinpath("dataset.pt").absolute()
@@ -121,7 +105,7 @@ def main():
     # prep_data(target_dataset_path=data_path)
 
     ### Augmentations
-    config["trainloader::workers"] = 6
+    config["trainloader::workers"] = 8
     config["trainset::add_noise_view_1"] = 0.1
     config["trainset::add_noise_view_2"] = 0.1
     config["trainset::noise_multiplicative"] = True

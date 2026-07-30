@@ -102,10 +102,8 @@ class TwoViewSplit(torch.nn.Module):
 
     def _forward_permutation(self, ddx1, mdx1, p1):
         # ddx.shape[-3] contains random permutations
-        # choose two out of those and slice
-        perm_ids = torch.randperm(
-            n=ddx1.shape[-3], dtype=torch.int32, device=ddx1.device
-        )[:2]
+        # randomly choose two out of those and slice
+        perm_ids = torch.randperm(n=ddx1.shape[-3], dtype=torch.int32, device=ddx1.device)[:2]
         if self.view_1_canon == True:
             perm_ids[0] = 0
         if self.view_2_canon == True:
