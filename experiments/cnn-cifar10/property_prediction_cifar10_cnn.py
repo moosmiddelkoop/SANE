@@ -20,6 +20,7 @@ from SANE.git_re_basin.git_re_basin import (
     zoo_cnn_permutation_spec,
 )
 from SANE.models.def_AE_module import AEModule
+from SANE.utils import seed_everything
 
 
 # %%
@@ -35,6 +36,7 @@ model_path = Path("path/to/your/model")
 config = json.load(model_path.joinpath("params.json").open("r"))
 device = "cuda" if torch.cuda.is_available() else "cpu"
 config["device"] = device
+seed_everything(config.get("seed", 42))
 config["training::steps_per_epoch"] = 123
 module = AEModule(config)
 

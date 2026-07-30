@@ -18,6 +18,7 @@ from SANE.datasets.dataset_auxiliaries import (
     tokenize_checkpoint,
 )
 from SANE.models.def_AE_module import AEModule
+from SANE.utils import seed_everything
 
 import logging
 
@@ -56,6 +57,7 @@ model_path = Path("path/to/your/model")
 config = json.load(model_path.joinpath("params.json").open("r"))
 # config["device"] = "cpu"
 config["device"] = "cuda"
+seed_everything(config.get("seed", 42))
 config["training::steps_per_epoch"] = 123
 module = AEModule(config)
 

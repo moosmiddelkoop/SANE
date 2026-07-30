@@ -21,6 +21,7 @@ import torch
 from ray.air.integrations.wandb import WandbLoggerCallback
 
 from SANE.models.def_AE_trainable import AE_trainable
+from SANE.utils import seed_everything
 
 OUTPUT_PATH = Path("/projects/prjs2156/shared/wsl/metanets/sane_pretraining")
 WANDB_PROJECT = "sane-pretraining-smallcnnzoo"
@@ -52,6 +53,7 @@ def main():
     # set module parameterscd 
     config = {}
     config["seed"] = 32
+    seed_everything(config["seed"])
     config["device"] = "cuda"
     config["device_no"] = 1
     config["training::precision"] = "amp"

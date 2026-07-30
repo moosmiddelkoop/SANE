@@ -18,6 +18,7 @@ import ray
 import torch
 
 from SANE.models.def_AE_trainable import AE_trainable
+from SANE.utils import seed_everything
 
 PATH_ROOT = Path("./")
 
@@ -41,6 +42,7 @@ def main():
     # set module parameters
     config = {}
     config["seed"] = 32
+    seed_everything(config["seed"])
     config["device"] = "cuda"
     config["device_no"] = 1
     config["training::precision"] = "amp"

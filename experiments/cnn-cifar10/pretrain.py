@@ -32,6 +32,7 @@ from torch.utils.data import DataLoader
 from SANE.datasets.augmentations import MultiWindowCutter
 from SANE.models.def_AE_module import AEModule
 from SANE.models.def_AE_trainable import get_transformations
+from SANE.utils import seed_everything
 
 PATH_ROOT = Path("./")
 
@@ -40,6 +41,7 @@ def get_config():
     # same hyperparameters as pretrain_sane_cifar10_cnn.py, minus the Ray-only keys
     config = {}
     config["seed"] = 32
+    seed_everything(config["seed"])
     config["device"] = "cuda" if torch.cuda.is_available() else "cpu"
     config["training::precision"] = "amp"
     config["trainset::batchsize"] = 32
