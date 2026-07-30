@@ -25,7 +25,7 @@ class DownstreamTaskLearner:
 
     def __init__(self):
         """
-        nothing going on here, yet.
+        nothing going on here.
         """
         return
 
