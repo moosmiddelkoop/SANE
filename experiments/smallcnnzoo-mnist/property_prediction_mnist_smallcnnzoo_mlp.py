@@ -1,11 +1,11 @@
-"""Per-class recall MLP regression head for the smallcnnzoo-mnist SANE model.
+"""Per-class recall MLP regression head on cached SANE embeddings.
 
-Same setup as property_prediction_mnist_smallcnnzoo_multivariate.py, but trains a
-2-hidden-layer MLP (eval_per_class_recall_MLP) instead of a closed-form ridge head,
-and logs per-step / per-epoch loss to Weights & Biases.
-
-All DatasetTokens preprocessing params are kept identical to
-data/preprocess_dataset_smallcnnzoo_mnist.py so the embeddings stay on-distribution.
+Trains a 2-hidden-layer MLP (eval_per_class_recall_MLP) on the embeddings
+cached by recall_prediction_mse_spread.py in
+recall_prediction/mse_spread/embeddings.pt (clipped encoder
+gradient-clip-2.0_7a92c, checkpoint_000050), epoch set [8]. Loading the cache
+replaces the hour-long zoo re-encode; models are re-split 0.7/0.15/0.15 by
+model id. Logs per-step / per-epoch loss to Weights & Biases.
 
 Run from this directory with the project venv:
     source "$HOME/SANE/.venv/bin/activate"
@@ -22,14 +22,13 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = "2"
 os.environ["NUMEXPR_NUM_THREADS"] = "2"
 
 import json
+import random
+from datetime import datetime
 from pathlib import Path
 
 import torch
 import wandb
 
-from SANE.datasets.dataset_tokens import DatasetTokens
-from SANE.git_re_basin.git_re_basin import smallcnnzoo_permutation_spec
-from SANE.models.def_AE_module import AEModule
 from SANE.models.def_downstream_module import DownstreamTaskLearner
 from SANE.utils import seed_everything
 
@@ -44,34 +43,35 @@ seed_everything(SEED)
 # ---------------------------------------------------------------------------
 # Paths / config
 # ---------------------------------------------------------------------------
-TRIAL_DIR = Path("sane_pretraining/sane_mnist_smallcnnzoo/AE_trainable_e550b_00000_0_2026-06-24_17-46-42")
+EMBEDDINGS_PT = Path("recall_prediction/mse_spread/embeddings.pt")
+ENCODER = "gradient-clip-2.0_7a92c_00000_2026-07-07_19-01-21/checkpoint_000050"
+EPOCH_SET = "8"  # which epoch of the model zoo models to use
 OUT_DIR = Path("recall_prediction/mlp")
 os.makedirs(OUT_DIR, exist_ok=True)
-CHECKPOINT = TRIAL_DIR / "checkpoint_000010" / "state.pt"
-ZOO_ROOT = Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/")
 RESULTS_JSON = OUT_DIR / "mlp_mnist_smallcnnzoo_per_class_recall.json"
 
-EPOCH_LIST = [8]
 ACC_CLASS_KEYS = [f"acc_class_{i}" for i in range(10)]
+DS_SPLIT = [0.7, 0.15, 0.15]
 
 # MLP training hyperparameters
 EPOCHS = 200
 LR = 1e-3
 MLP_BATCH_SIZE = 64
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
 # ---------------------------------------------------------------------------
 # wandb
 # ---------------------------------------------------------------------------
 wandb.init(
     project="sane-per-class-recall-mlp",
-    name="mnist_smallcnnzoo_mlp",
+    name="mnist_smallcnnzoo_mlp" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
     dir=OUT_DIR,
     config={
         "seed": SEED,
-        "epoch_list": EPOCH_LIST,
+        "encoder": ENCODER,
+        "embeddings_source": str(EMBEDDINGS_PT),
+        "epoch_set": EPOCH_SET,
         "target_keys": ACC_CLASS_KEYS,
+        "ds_split": DS_SPLIT,
         "epochs": EPOCHS,
         "lr": LR,
         "mlp_batch_size": MLP_BATCH_SIZE,
@@ -81,74 +81,40 @@ wandb.init(
 )
 
 # ---------------------------------------------------------------------------
-# Load pretrained SANE autoencoder
+# Load cached embeddings + targets, re-split by model id
 # ---------------------------------------------------------------------------
-logging.info("Loading pretrained SANE model")
-config = json.load((TRIAL_DIR / "params.json").open("r"))
-config["seed"] = SEED
-config["device"] = device
-config["model::compile"] = False
+logging.info(f"Loading cached embeddings from {EMBEDDINGS_PT} (epoch set {EPOCH_SET})")
+cache = torch.load(EMBEDDINGS_PT, map_location="cpu")[EPOCH_SET]
+z, Y, mid = cache["z"], cache["Y"], cache["mid"]
+logging.info(f"{z.shape[0]} samples, {int(mid.max()) + 1} models")
 
-config["training::steps_per_epoch"] = 1
-module = AEModule(config)
-
-checkpoint = torch.load(CHECKPOINT, map_location=device)
-state_dict = {k.replace("_orig_mod.", ""): v for k, v in checkpoint["model"].items()}
-module.model.load_state_dict(state_dict)
-module.model.eval()
-
-# ---------------------------------------------------------------------------
-# Build DatasetTokens over the zoo at epochs [8]
-# (params identical to preprocess_dataset_smallcnnzoo_mnist.py)
-# ---------------------------------------------------------------------------
-property_keys = {
-    "result_keys": ACC_CLASS_KEYS + ["test_acc", "training_iteration"],
-    "config_keys": [],
-}
-
-
-def build_split(split):
-    logging.info(f"Building DatasetTokens split={split}")
-    return DatasetTokens(
-        root=ZOO_ROOT,
-        epoch_lst=EPOCH_LIST,
-        mode="vector",
-        permutation_spec=smallcnnzoo_permutation_spec(),
-        map_to_canonical=True,
-        standardize=True,
-        tokensize=config["ae:i_dim"],
-        train_val_test=split,
-        ds_split=[0.7, 0.15, 0.15],
-        weight_threshold=100,
-        max_samples=None,
-        property_keys=property_keys,
-        shuffle_path=True,
-        num_threads=12,
-        verbosity=3,
-        getitem="tokens+props",
-        ignore_bn=True,
-    )
-
-
-ds_train = build_split("train")
-ds_test = build_split("test")
+n_models = int(mid.max()) + 1
+models = list(range(n_models))
+random.Random(SEED).shuffle(models)
+idx1 = int(DS_SPLIT[0] * n_models)
+idx2 = idx1 + int(DS_SPLIT[1] * n_models)
+train_mask = torch.isin(mid, torch.tensor(models[:idx1]))
+test_mask = torch.isin(mid, torch.tensor(models[idx2:]))
 
 # ---------------------------------------------------------------------------
 # Train MLP regression head with wandb logging
 # ---------------------------------------------------------------------------
-logging.info("Training MLP per-class recall head on SANE embeddings")
+logging.info("Training MLP per-class recall head on cached SANE embeddings")
 dstk = DownstreamTaskLearner()
 result = dstk.eval_per_class_recall_MLP(
-    model=module,
-    trainset=ds_train,
-    testset=ds_test,
+    model=None,
+    trainset=(z[train_mask], Y[train_mask]),
+    testset=(z[test_mask], Y[test_mask]),
     target_keys=ACC_CLASS_KEYS,
-    batch_size=256,
     epochs=EPOCHS,
     lr=LR,
     mlp_batch_size=MLP_BATCH_SIZE,
     log_fn=wandb.log,
 )
+
+MLP_PT = OUT_DIR / "mlp_head.pt"
+torch.save(result.pop("mlp").state_dict(), MLP_PT)
+logging.info(f"Saved MLP head state_dict to {MLP_PT}")
 
 logging.info(f"Final train loss: {result['final_train_loss']:.6f}")
 logging.info(f"MSE train: {result['mse_train']:.6f}  MSE test: {result['mse_test']:.6f}")
@@ -159,7 +125,9 @@ logging.info(f"Mean R^2 train: {result['r2_train']:.4f}  Mean R^2 test: {result[
 # ---------------------------------------------------------------------------
 summary = {
     "method": "sane_mnist_smallcnnzoo_mlp",
-    "epoch_list": EPOCH_LIST,
+    "encoder": ENCODER,
+    "embeddings_source": str(EMBEDDINGS_PT),
+    "epoch_set": EPOCH_SET,
     "epochs": EPOCHS,
     "lr": LR,
     "mlp_batch_size": MLP_BATCH_SIZE,

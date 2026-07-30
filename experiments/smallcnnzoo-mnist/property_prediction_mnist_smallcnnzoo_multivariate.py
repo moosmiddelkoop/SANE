@@ -47,7 +47,7 @@ seed_everything(67)
 # ---------------------------------------------------------------------------
 # Paths / config
 # ---------------------------------------------------------------------------
-TRIAL_DIR = Path("sane_pretraining/sane_mnist_smallcnnzoo/AE_trainable_e550b_00000_0_2026-06-24_17-46-42")
+TRIAL_DIR = Path("/projects/prjs2156/shared/wsl/metanets/sane_pretraining/sane_mnist_smallcnnzoo/AE_trainable_e550b_00000_0_2026-06-24_17-46-42")
 OUT_DIR = Path("recall_prediction/epoch0-4-8")
 os.makedirs(OUT_DIR, exist_ok=True)
 CHECKPOINT = TRIAL_DIR / "checkpoint_000010" / "state.pt"  # latest available checkpoint
