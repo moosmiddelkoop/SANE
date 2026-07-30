@@ -11,6 +11,7 @@ import tqdm
 from einops import repeat
 
 from SANE.datasets.def_FastTensorDataLoader import FastTensorDataLoader
+from SANE.models.def_AE_module import AEModule
 
 # for classification
 from SANE.models.def_net import NNmodule
@@ -806,8 +807,98 @@ class DownstreamTaskLearner:
             result["mean_r2_val"] = result["r2_val"].mean().item()
         return result
 
-    def eval_per_class_recall_MLP():
-        pass
+    def eval_per_class_recall_MLP(
+        self,
+        model: AEModule,
+        trainset,
+        testset,
+        target_keys: list,
+        batch_size: int = 100,
+        epochs: int = 200,
+        lr: float = 1e-3,
+        mlp_batch_size: int = 64,
+        sentinel: float = -999.0,
+        log_fn=None,
+    ):
+        """
+        bareback MLP regression head (e.g. per-class recall). Returns final train
+        loss, and MSE / mean-R^2 on train and test.
+
+        If log_fn is given, it is called each step with {"loss_step": ..., "epoch": ...,
+        "step": ...} and each epoch with {"loss_epoch": ..., "epoch": ...}. The caller
+        owns the logging backend (e.g. wandb.log).
+        """
+        self.polar_coordinates = False
+        self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+        def _prep(dataset):
+            weights, _ = dataset.__get_weights__()
+            try:
+                positions = torch.stack(dataset.pos)
+            except Exception:
+                positions = repeat(dataset.positions, "n d -> b n d", b=weights.shape[0])
+            embeddings = self.map_embeddings(weights=weights, pos=positions, model=model, batch_size=batch_size)
+            targets = self._stack_target_columns(dataset, target_keys)
+            targets = torch.where(targets == sentinel, torch.full_like(targets, float("nan")), targets)
+            valid_rows = ~torch.isnan(targets).any(dim=1)
+            return embeddings[valid_rows].float().to(self.device), targets[valid_rows].float().to(self.device)
+
+        embeddings_train, targets_train = _prep(trainset)
+        embeddings_test, targets_test = _prep(testset)
+
+        mlp = nn.Sequential(
+            nn.Linear(embeddings_train.shape[1], 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, targets_train.shape[1]),
+        )
+
+        mlp.to(self.device)
+
+        optimizer = torch.optim.Adam(mlp.parameters(), lr=lr)
+        loss_fn = nn.MSELoss()
+        loader = FastTensorDataLoader(
+            torch.utils.data.TensorDataset(embeddings_train, targets_train),
+            batch_size=mlp_batch_size,
+            shuffle=True,
+        )
+
+        mlp.train()
+        last_loss = 0.0
+        global_step = 0
+        for epoch in range(epochs):
+            loss_sum, n_batches = 0.0, 0
+            for embeddings_batch, targets_batch in loader:
+                optimizer.zero_grad()
+                loss = loss_fn(mlp(embeddings_batch), targets_batch)
+                loss.backward()
+                optimizer.step()
+                loss_value = loss.item()
+                loss_sum, n_batches = loss_sum + loss_value, n_batches + 1
+                if log_fn is not None:
+                    log_fn({"loss_step": loss_value, "epoch": epoch, "step": global_step})
+                global_step += 1
+            last_loss = loss_sum / n_batches
+            if log_fn is not None:
+                log_fn({"loss_epoch": last_loss, "epoch": epoch})
+
+        mlp.eval()
+        with torch.no_grad():
+            pred_train, pred_test = mlp(embeddings_train), mlp(embeddings_test)
+            mse_train = loss_fn(pred_train, targets_train).item()
+            mse_test = loss_fn(pred_test, targets_test).item()
+            r2_train = self.compute_r2_multivariate(pred_train, targets_train).mean().item()
+            r2_test = self.compute_r2_multivariate(pred_test, targets_test).mean().item()
+
+        return {
+            "final_train_loss": last_loss,
+            "mse_train": mse_train,
+            "mse_test": mse_test,
+            "r2_train": r2_train,
+            "r2_test": r2_test,
+            "target_keys": list(target_keys),
+        }
 
     def eval_ood_dstask(
         self,
