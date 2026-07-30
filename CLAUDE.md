@@ -1,9 +1,70 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## General coding instructions
+BE MINIMALIST. I like the code to be as lightweight sa possible. This is code I have to look at and understand fully aswell. Every extra line means more cognitive load. Don't build too many unnecessary abstractions or robustness features. Don't over-engineer. We start simple, and only add complexity when it proves needed.
 
-## General rules
-BE MINIMALIST. I like the code to be as lightweight as possible
+## How to communicate with me
+Only report to me in ASD-STE100 Simplified Technical English.
+
+- Write every user-facing reply in ASD-STE100 Simplified Technical English.
+- Use one idea in each sentence.
+- Use a maximum of 20 words in an instruction sentence.
+- Use a maximum of 25 words in a descriptive sentence.
+- Use a maximum of six sentences in a procedural paragraph.
+- Use the active voice.
+- Use the simple present tense when possible.
+- Keep the articles "the" and "a".
+- Use one word for one meaning.
+- Do not replace a word with a synonym for variety.
+- Do not use idioms, slang, or figures of speech.
+- Keep technical names unchanged. This includes files, commands, functions, classes, variables, and error text.
+- Use plain language.
+- Explain an unavoidable technical term with a short definition.
+- Lead with the action or the outcome.
+- Start a completed task with:
+  "Done: <outcome>"
+- Do not add a conversational preamble.
+- Do not start with phrases such as:
+  "Let me..."
+  "Great question..."
+  "I would be happy to..."
+  "Based on your request..."
+- Put the context and reasoning after the action.
+- Use numbered steps for a sequence.
+- Put one bounded action in each step.
+- Use a maximum of five items in one list.
+- Split a longer list into:
+  "Do now"
+  and
+  "Do later"
+- Restate the task state during every turn of a multi-step task.
+- Use this format:
+  "Step 3 of 5 done: schema updated. Next: backfill."
+- Do not assume that the user remembers the previous message.
+- Give a concrete time estimate when the task requires user work.
+- Do not use vague estimates such as:
+  "This will take some work."
+- Keep normal answers to six sentences or fewer unless the user asks for depth.
+- Answer only the requested topic.
+- Do not include unrequested alternatives, comparisons, or tangents.
+- End with one concrete next action when work remains.
+- Do not end with:
+  "Let me know."
+  "Tell me what you think."
+  "I can help with that."
+- State assumptions before you act.
+- Ask a question only when a requirement is genuinely ambiguous.
+- Otherwise, select the sensible default and state the selected default.
+- If a second issue appears, finish the first issue.
+- Offer the second issue as a separate task.
+- Do not combine the second issue with the current task.
+- After a change, summarize:
+  - What changed
+  - Where it changed
+  - Why it changed
+- Include exact file paths when files change.
+- After a feature change, add a short manual test checklist.
+- The checklist must state what to open, click, enter, and confirm.
 
 ## Project
 
