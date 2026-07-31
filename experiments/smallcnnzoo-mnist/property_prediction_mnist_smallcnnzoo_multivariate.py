@@ -42,14 +42,16 @@ logging.basicConfig(level=logging.INFO)
 # Paths / config
 # ---------------------------------------------------------------------------
 TRIAL_DIR = Path(
-    "sane_pretraining/sane_mnist_smallcnnzoo/"
-    "AE_trainable_e550b_00000_0_2026-06-24_17-46-42"
+    "./experiments/smallcnnzoo-mnist/"
+    "AE_trainable_e550b"
 )
 OUT_DIR = Path("recall_prediction/epoch0-4-8")
 os.makedirs(OUT_DIR, exist_ok=True)
 CHECKPOINT = TRIAL_DIR / "checkpoint_000010" / "state.pt"   # latest available checkpoint
-ZOO_ROOT = Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_mnist/")
+ZOO_ROOT = Path("/Users/ilic/Documents/WSL/PyTorch-port/output/unthi_mnist")
 RESULTS_JSON = OUT_DIR / "multivariate_mnist_smallcnnzoo_per_class_recall.json"
+DATASET_CACHE_DIR = OUT_DIR / "dataset_cache"
+os.makedirs(DATASET_CACHE_DIR, exist_ok=True)
 
 EPOCH_LIST = [8]  # the only iterations with valid acc_class_* values
 ACC_CLASS_KEYS = [f"acc_class_{i}" for i in range(10)]
@@ -87,7 +89,9 @@ property_keys = {
 
 def build_split(split):
     logging.info(f"Building DatasetTokens split={split}")
-    return DatasetTokens(
+    cache_path = DATASET_CACHE_DIR / f"smallcnnzoo_mnist_epoch0-4-8_{split}.pt"
+
+    ds = DatasetTokens(
         root=ZOO_ROOT,
         epoch_lst=EPOCH_LIST,
         mode="vector",
@@ -106,11 +110,16 @@ def build_split(split):
         getitem="tokens+props",
         ignore_bn=True,
     )
+    torch.save(ds, cache_path)
+    logging.info(f"Saved DatasetTokens split={split} to {cache_path}")
+    return ds
 
 
 ds_train = build_split("train")
 ds_val = build_split("val")
 ds_test = build_split("test")
+
+
 
 # ---------------------------------------------------------------------------
 # Multivariate linear (closed-form ridge) head: 10 outputs (per-class recall),

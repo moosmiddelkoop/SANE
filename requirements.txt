@@ -70,14 +70,12 @@ Pygments==2.19.2
 python-dateutil==2.9.0.post0
 PyYAML==6.0.3
 pyzmq==27.1.0
-ray==2.6.1
 rebasin==0.0.47
 referencing==0.37.0
 requests==2.33.0
 rich==14.3.3
 rpds-py==0.30.0
 safetensors==0.7.0
--e git+ssh://git@github.com/moosmiddelkoop/SANE.git@55ff450f89a042e8e4e48fab2ae7fe3b138384f2#egg=SANE
 scikit-learn==1.8.0
 scipy==1.17.1
 sentry-sdk==2.58.0
@@ -104,5 +102,4 @@ wcwidth==0.6.0
 widgetsnbextension==4.0.15
 yarl==1.23.0
 scipy
-ray==2.6.1
 rebasin

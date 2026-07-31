@@ -1,0 +1,26 @@
+# The same meta-network as sane_wse_manifest.yaml, with one key changed: models are aligned to the
+# canonical frame before they are encoded, as map_to_canonical=True did during training.
+# Used by sane_wse_canonicalization.py to measure whether that alignment matters.
+
+ae_trial_dir: experiments/smallcnnzoo-mnist/AE_trainable_e550b
+prediction_head: recall_prediction/epoch0-4-8/multivariate_mnist_smallcnnzoo_per_class_recall_head.pt
+
+ignore_bn: true
+standardization:
+  conv1.weight:
+    mean: -0.03309322148561478
+    std: 0.5437855124473572
+  conv2.weight:
+    mean: -0.028777411207556725
+    std: 0.5015029907226562
+  conv3.weight:
+    mean: -0.020459409803152084
+    std: 0.4672558307647705
+  dense.weight:
+    mean: 0.005144187249243259
+    std: 0.6435824036598206
+
+permutation_spec: smallcnnzoo_permutation_spec
+reference_checkpoint: recall_prediction/epoch0-4-8/wse/reference_checkpoint.pt
+
+clamp_min: null

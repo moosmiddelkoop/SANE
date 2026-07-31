@@ -1,0 +1,33 @@
+# The smallcnnzoo-mnist SANE meta-network, for the wse unlearning pipeline.
+# Paths are relative to this file. See sane_wse.py for what each artifact is.
+#
+#   uv run wse check-lens 'sane_wse:from_manifest(path=<this file>)' --zoo <indexed zoo>
+
+ae_trial_dir: experiments/smallcnnzoo-mnist/AE_trainable_e550b
+prediction_head: recall_prediction/epoch0-4-8/multivariate_mnist_smallcnnzoo_per_class_recall_head.pt
+
+# Must match the preprocessing the AE and the head were trained on. Written by
+# sane_wse_from_cache.py out of the DatasetTokens the head was fit on.
+ignore_bn: true
+standardization:
+  conv1.weight:
+    mean: -0.03309322148561478
+    std: 0.5437855124473572
+  conv2.weight:
+    mean: -0.028777411207556725
+    std: 0.5015029907226562
+  conv3.weight:
+    mean: -0.020459409803152084
+    std: 0.4672558307647705
+  dense.weight:
+    mean: 0.005144187249243259
+    std: 0.6435824036598206
+
+# The AE and the head were trained with map_to_canonical=True. Naming a permutation spec turns
+# alignment on, which runs git-re-basin weight matching per model and cannot be batched. Leaving it
+# null reproduces the existing results.
+permutation_spec: null
+reference_checkpoint: recall_prediction/epoch0-4-8/wse/reference_checkpoint.pt
+
+# null keeps the raw ridge output, which can be slightly negative for a class near zero accuracy.
+clamp_min: null

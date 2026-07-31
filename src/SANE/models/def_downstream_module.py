@@ -234,6 +234,8 @@ class DownstreamTaskLearner:
             for wdx, pdx in weightloader:
                 # batches are tuples...
                 wdx, pdx = wdx.to(self.device), pdx.to(torch.int).to(self.device)
+                print(wdx.shape, pdx.shape)
+                print(wdx, pdx)
                 # wdx = wdx[0]
                 # zdx = model.forward_encoder(wdx)
                 zdx = model.forward_embeddings(wdx, pdx)
@@ -739,6 +741,7 @@ class DownstreamTaskLearner:
             1e-4,
             3e-5,
             1e-5,
+            1e-9  # effectively zero regularization, keep non-zero to keep solver stable
         ]
         mean_r2_train = []
         mean_r2_val = []
@@ -850,7 +853,15 @@ class DownstreamTaskLearner:
             if dataset is None:
                 return None
             Y = self._stack_target_columns(dataset, target_keys)
-            return torch.where(Y == sentinel, torch.full_like(Y, float("nan")), Y)
+            sentinel_mask = Y == sentinel
+            n_replaced = int(sentinel_mask.sum().item())
+            if n_replaced > 0:
+                logging.warning(
+                    "Replaced %d sentinel target values (%s) with NaN.",
+                    n_replaced,
+                    sentinel,
+                )
+            return torch.where(sentinel_mask, torch.full_like(Y, float("nan")), Y)
 
         Y_train = _targets(trainset)
         Y_test = _targets(testset)

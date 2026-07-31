@@ -1,0 +1,21 @@
+# SANE + MLP prediction head on MNIST SmallCNN
+ae_trial_dir: experiments/smallcnnzoo-mnist/AE_trainable_e550b
+prediction_head: mnist_sane_mlp_head/smallcnnzoo_mnist_mlp_head.pt
+
+ignore_bn: true
+standardization:
+  conv1.weight:
+    mean: -0.03309322148561478
+    std: 0.5437855124473572
+  conv2.weight:
+    mean: -0.028777411207556725
+    std: 0.5015029907226562
+  conv3.weight:
+    mean: -0.020459409803152084
+    std: 0.4672558307647705
+  dense.weight:
+    mean: 0.005144187249243259
+    std: 0.6435824036598206
+
+permutation_spec: null
+clamp_min: null
