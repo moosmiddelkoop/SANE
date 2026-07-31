@@ -128,13 +128,14 @@ z_store = {}
 for epoch_list in EPOCH_SETS:
     label = "-".join(str(e) for e in epoch_list)
     # --- build + embed once ---
-    z_all, Y_all, mid_all, offset = [], [], [], 0
+    z_all, Y_all, mid_all, dirs_all, offset = [], [], [], [], 0
     for split in ["train", "val", "test"]:
         ds = build_split(epoch_list, split)
         z, Y, mid = embed_and_targets(ds)
         z_all.append(z)
         Y_all.append(Y)
         mid_all.append(mid + offset)
+        dirs_all.extend(Path(p[0]).name for p in ds.paths)
         offset += len(ds.data)
         del ds
         gc.collect()
@@ -142,7 +143,7 @@ for epoch_list in EPOCH_SETS:
     Y_all = torch.cat(Y_all)
     mid_all = torch.cat(mid_all)
     logging.info(f"epochs {label}: {z_all.shape[0]} samples from {offset} models")
-    z_store[label] = {"z": z_all, "Y": Y_all, "mid": mid_all}
+    z_store[label] = {"z": z_all, "Y": Y_all, "mid": mid_all, "model_dirs": dirs_all}
     torch.save(z_store, EMBEDDINGS_PT)
 
     # --- 10 random resplits by model, refit ridge head each time ---

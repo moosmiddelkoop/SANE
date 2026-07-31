@@ -4,7 +4,9 @@ Encodes the unthi_svhn zoo at epoch 8 with the latest pretrained encoder
 (checkpoint_000050 of the latest run) and caches embeddings + targets + model
 ids to recall_prediction/mlp/embeddings.pt. If the cache exists, encoding is
 skipped. Then trains the 2-hidden-layer MLP head (eval_per_class_recall_MLP)
-on a 0.7/0.15/0.15 re-split by model id and logs to Weights & Biases.
+once per seed in SEEDS, each time on a fresh 0.8/0.2 re-split by model id
+(RE_SHUFFLE), logs each run to Weights & Biases, and writes per-seed and
+mean/std MSE / MAE / R^2 to a JSON file.
 
 Run from this directory with the project venv:
     source "$HOME/SANE/.venv/bin/activate"
@@ -23,6 +25,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "2"
 import gc
 import json
 import random
+import statistics
 from datetime import datetime
 from pathlib import Path
 
@@ -39,12 +42,6 @@ from SANE.utils import seed_everything
 logging.basicConfig(level=logging.INFO)
 
 # ---------------------------------------------------------------------------
-# Seed
-# ---------------------------------------------------------------------------
-SEED = 67
-seed_everything(SEED)
-
-# ---------------------------------------------------------------------------
 # Paths / config
 # ---------------------------------------------------------------------------
 ZOO = "svhn"
@@ -57,43 +54,25 @@ ZOO_ROOT = Path("/gpfs/scratch1/shared/mmiddelkoop/unthi_zoo/unthi_svhn/")
 OUT_DIR = Path("recall_prediction/mlp")
 os.makedirs(OUT_DIR, exist_ok=True)
 EMBEDDINGS_PT = OUT_DIR / "embeddings.pt"
-MLP_PT = OUT_DIR / "mlp_head.pt"
 RESULTS_JSON = OUT_DIR / f"mlp_{ZOO}_smallcnnzoo_per_class_recall.json"
 
 EPOCH_LIST = [8]  # which epoch of the model zoo models to use
 EPOCH_SET = "8"  # key in the embeddings cache
 ACC_CLASS_KEYS = [f"acc_class_{i}" for i in range(10)]
-DS_SPLIT = [0.7, 0.15, 0.15]
+DS_SPLIT = [0.8, 0.2]
+SPLITS = ["train", "test"]
 SENTINEL = -999.0
+RE_SHUFFLE = True  # shuffle model ids per seed before the re-split
+SEEDS = list(range(10))
 
 # MLP training hyperparameters
 EPOCHS = 200
 LR = 1e-3
 MLP_BATCH_SIZE = 64
+METRIC_KEYS = ["mse_train", "mse_test", "mae_train", "mae_test", "r2_train", "r2_test"]
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-
-# ---------------------------------------------------------------------------
-# wandb
-# ---------------------------------------------------------------------------
-wandb.init(
-    project="sane-per-class-recall-mlp",
-    name=f"{ZOO}_smallcnnzoo_mlp" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
-    dir=OUT_DIR,
-    config={
-        "seed": SEED,
-        "encoder": str(CHECKPOINT),
-        "embeddings_source": str(EMBEDDINGS_PT),
-        "epoch_set": EPOCH_SET,
-        "target_keys": ACC_CLASS_KEYS,
-        "ds_split": DS_SPLIT,
-        "epochs": EPOCHS,
-        "lr": LR,
-        "mlp_batch_size": MLP_BATCH_SIZE,
-        "hidden_dim": 128,
-        "n_hidden": 2,
-    },
-)
+seed_everything(SEEDS[0])
 
 dstk = DownstreamTaskLearner()
 dstk.polar_coordinates = False
@@ -108,7 +87,7 @@ if EMBEDDINGS_PT.exists():
 else:
     logging.info("Loading pretrained SANE model")
     config = json.load((TRIAL_DIR / "params.json").open("r"))
-    config["seed"] = SEED
+    config["seed"] = SEEDS[0]
     config["device"] = device
     config["model::compile"] = False
     config["training::steps_per_epoch"] = 1
@@ -139,7 +118,7 @@ else:
             weight_threshold=100,
             max_samples=None,
             property_keys=property_keys,
-            shuffle_path=True,
+            shuffle_path=False,  # first 0.8xn_models are train, last 0.2xn_models are test
             num_threads=12,
             verbosity=3,
             getitem="tokens+props",
@@ -161,59 +140,89 @@ else:
         )
         return z, Y, mid
 
-    z_all, Y_all, mid_all, offset = [], [], [], 0
-    for split in ["train", "val", "test"]:
+    z_all, Y_all, mid_all, dirs_all, offset = [], [], [], [], 0
+    for split in SPLITS:
         ds = build_split(split)
         z, Y, mid = embed_and_targets(ds)
         z_all.append(z)
         Y_all.append(Y)
         mid_all.append(mid + offset)
+        dirs_all.extend(Path(p[0]).name for p in ds.paths)
         offset += len(ds.data)
         del ds
         gc.collect()
+
     cache = {
         "z": torch.cat(z_all),
         "Y": torch.cat(Y_all),
-        "mid": torch.cat(mid_all),
+        "mid": torch.cat(mid_all),  # model id
+        "model_dirs": dirs_all,  # zoo dir name per model id
     }
     torch.save({EPOCH_SET: cache}, EMBEDDINGS_PT)
     logging.info(f"Saved embeddings cache to {EMBEDDINGS_PT}")
 
 z, Y, mid = cache["z"], cache["Y"], cache["mid"]
-logging.info(f"{z.shape[0]} samples, {int(mid.max()) + 1} models")
-
-# ---------------------------------------------------------------------------
-# Re-split by model id
-# ---------------------------------------------------------------------------
 n_models = int(mid.max()) + 1
-models = list(range(n_models))
-random.Random(SEED).shuffle(models)
-idx1 = int(DS_SPLIT[0] * n_models)
-idx2 = idx1 + int(DS_SPLIT[1] * n_models)
-train_mask = torch.isin(mid, torch.tensor(models[:idx1]))
-test_mask = torch.isin(mid, torch.tensor(models[idx2:]))
+logging.info(f"{z.shape[0]} samples, {n_models} models")
 
 # ---------------------------------------------------------------------------
-# Train MLP regression head with wandb logging
+# One MLP run per seed, re-split by model id each time
 # ---------------------------------------------------------------------------
-logging.info("Training MLP per-class recall head on SANE embeddings")
-result = dstk.eval_per_class_recall_MLP(
-    model=None,
-    trainset=(z[train_mask], Y[train_mask]),
-    testset=(z[test_mask], Y[test_mask]),
-    target_keys=ACC_CLASS_KEYS,
-    epochs=EPOCHS,
-    lr=LR,
-    mlp_batch_size=MLP_BATCH_SIZE,
-    log_fn=wandb.log,
-)
+per_seed = {}
+for seed in SEEDS:
+    seed_everything(seed)
+    models = list(range(n_models))
+    if RE_SHUFFLE:
+        random.Random(seed).shuffle(models)
+    idx1 = int(DS_SPLIT[0] * n_models)
+    train_mask = torch.isin(mid, torch.tensor(models[:idx1]))
+    test_mask = torch.isin(mid, torch.tensor(models[idx1:]))
 
-torch.save(result.pop("mlp").state_dict(), MLP_PT)
-logging.info(f"Saved MLP head state_dict to {MLP_PT}")
+    wandb.init(
+        project="sane-per-class-recall-mlp",
+        name=f"{ZOO}_smallcnnzoo_mlp_seed{seed}_"
+        + datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
+        dir=OUT_DIR,
+        config={
+            "seed": seed,
+            "re_shuffle": RE_SHUFFLE,
+            "encoder": str(CHECKPOINT),
+            "embeddings_source": str(EMBEDDINGS_PT),
+            "epoch_set": EPOCH_SET,
+            "target_keys": ACC_CLASS_KEYS,
+            "ds_split": DS_SPLIT,
+            "epochs": EPOCHS,
+            "lr": LR,
+            "mlp_batch_size": MLP_BATCH_SIZE,
+            "hidden_dim": 128,
+            "n_hidden": 2,
+        },
+    )
+    logging.info(f"Training MLP per-class recall head, seed {seed}")
+    result = dstk.eval_per_class_recall_MLP(
+        model=None,
+        trainset=(z[train_mask], Y[train_mask]),
+        testset=(z[test_mask], Y[test_mask]),
+        target_keys=ACC_CLASS_KEYS,
+        epochs=EPOCHS,
+        lr=LR,
+        mlp_batch_size=MLP_BATCH_SIZE,
+        log_fn=wandb.log,
+    )
+    mlp = result.pop("mlp")
+    torch.save(mlp.state_dict(), OUT_DIR / f"mlp_head_seed{seed}.pt")
+    per_seed[seed] = {k: result[k] for k in METRIC_KEYS + ["final_train_loss"]}
+    wandb.log(per_seed[seed])
+    wandb.finish()
+    logging.info(
+        f"seed {seed}: MSE test {result['mse_test']:.6f}  "
+        f"MAE test {result['mae_test']:.6f}  R^2 test {result['r2_test']:.4f}"
+    )
 
-logging.info(f"Final train loss: {result['final_train_loss']:.6f}")
-logging.info(f"MSE train: {result['mse_train']:.6f}  MSE test: {result['mse_test']:.6f}")
-logging.info(f"Mean R^2 train: {result['r2_train']:.4f}  Mean R^2 test: {result['r2_test']:.4f}")
+mean = {k: statistics.mean(r[k] for r in per_seed.values()) for k in METRIC_KEYS}
+std = {k: statistics.stdev(r[k] for r in per_seed.values()) for k in METRIC_KEYS}
+for k in METRIC_KEYS:
+    logging.info(f"{k}: {mean[k]:.6f} +/- {std[k]:.6f}")
 
 # ---------------------------------------------------------------------------
 # Persist results
@@ -226,22 +235,17 @@ summary = {
     "epochs": EPOCHS,
     "lr": LR,
     "mlp_batch_size": MLP_BATCH_SIZE,
-    "final_train_loss": result["final_train_loss"],
-    "mse_train": result["mse_train"],
-    "mse_test": result["mse_test"],
-    "r2_train": result["r2_train"],
-    "r2_test": result["r2_test"],
+    "mlp_layer_dims": [m.in_features for m in mlp if isinstance(m, torch.nn.Linear)]
+    + [mlp[-1].out_features],
+    "mlp_activation": "ReLU",
+    "mlp_optimizer": "Adam",
+    "re_shuffle": RE_SHUFFLE,
+    "seeds": SEEDS,
+    "per_seed": per_seed,
+    "mean": mean,
+    "std": std,
     "target_keys": ACC_CLASS_KEYS,
 }
 with open(RESULTS_JSON, "w") as f:
     json.dump(summary, f, indent=4)
 logging.info(f"Wrote results to {RESULTS_JSON}")
-
-wandb.log({
-    "final_train_loss": result["final_train_loss"],
-    "mse_train": result["mse_train"],
-    "mse_test": result["mse_test"],
-    "r2_train": result["r2_train"],
-    "r2_test": result["r2_test"],
-})
-wandb.finish()
