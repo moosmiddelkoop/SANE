@@ -75,6 +75,9 @@ class ModelDatasetBaseEpochs(Dataset):
         # shuffle self.path_list
         if shuffle_path:
             random.shuffle(self.path_list)
+        else:
+            # (length, string) sorts unpadded numeric names in numeric order
+            self.path_list.sort(key=lambda p: (len(p.name), p.name))
 
         ### Split Train and Test set ###########################################################################
         if max_samples is not None:
