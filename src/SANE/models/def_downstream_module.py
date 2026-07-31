@@ -822,7 +822,7 @@ class DownstreamTaskLearner:
     ):
         """
         bareback MLP regression head (e.g. per-class recall). Returns final train
-        loss, and MSE / mean-R^2 on train and test.
+        loss, and MSE / MAE / mean-R^2 on train and test.
 
         If log_fn is given, it is called each step with {"loss_step": ..., "epoch": ...,
         "step": ...} and each epoch with {"loss_epoch": ..., "epoch": ...}. The caller
@@ -900,6 +900,8 @@ class DownstreamTaskLearner:
             pred_train, pred_test = mlp(embeddings_train), mlp(embeddings_test)
             mse_train = loss_fn(pred_train, targets_train).item()
             mse_test = loss_fn(pred_test, targets_test).item()
+            mae_train = (pred_train - targets_train).abs().mean().item()
+            mae_test = (pred_test - targets_test).abs().mean().item()
             r2_train = self.compute_r2_multivariate(pred_train, targets_train).mean().item()
             r2_test = self.compute_r2_multivariate(pred_test, targets_test).mean().item()
 
@@ -907,6 +909,8 @@ class DownstreamTaskLearner:
             "final_train_loss": last_loss,
             "mse_train": mse_train,
             "mse_test": mse_test,
+            "mae_train": mae_train,
+            "mae_test": mae_test,
             "r2_train": r2_train,
             "r2_test": r2_test,
             "target_keys": list(target_keys),
