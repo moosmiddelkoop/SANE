@@ -53,8 +53,8 @@ CHECKPOINT = TRIAL_DIR / "checkpoint_000050" / "state.pt"
 ZOO_ROOT = Path("/gpfs/scratch1/shared/mmiddelkoop/unthi_zoo/unthi_cifar10/")
 OUT_DIR = Path("recall_prediction/mlp")
 os.makedirs(OUT_DIR, exist_ok=True)
-EMBEDDINGS_PT = OUT_DIR / "embeddings.pt"
-RESULTS_JSON = OUT_DIR / f"mlp_{ZOO}_smallcnnzoo_per_class_recall.json"
+EMBEDDINGS_PT = OUT_DIR / "embeddings_sorted.pt"
+RESULTS_JSON = OUT_DIR / f"mlp_{ZOO}_smallcnnzoo_per_class_recall_sorted.json"
 
 EPOCH_LIST = [8]  # which epoch of the model zoo models to use
 EPOCH_SET = "8"  # key in the embeddings cache
@@ -62,8 +62,10 @@ ACC_CLASS_KEYS = [f"acc_class_{i}" for i in range(10)]
 DS_SPLIT = [0.8, 0.2]
 SPLITS = ["train", "test"]
 SENTINEL = -999.0
-RE_SHUFFLE = True  # shuffle model ids per seed before the re-split
-SEEDS = list(range(10))
+RE_SHUFFLE = False  # shuffle model ids per seed before the re-split
+# SEEDS = list(range(10))
+SEEDS = [67]
+USE_EMBEDDINGS_CACHE = False  # if False, re-encode the zoo (slow)
 
 # MLP training hyperparameters
 EPOCHS = 200
@@ -81,7 +83,7 @@ dstk.device = torch.device(device)
 # ---------------------------------------------------------------------------
 # Encode the zoo (or load the cached embeddings)
 # ---------------------------------------------------------------------------
-if EMBEDDINGS_PT.exists():
+if EMBEDDINGS_PT.exists() and USE_EMBEDDINGS_CACHE:
     logging.info(f"Loading cached embeddings from {EMBEDDINGS_PT} (epoch set {EPOCH_SET})")
     cache = torch.load(EMBEDDINGS_PT, map_location="cpu")[EPOCH_SET]
 else:
