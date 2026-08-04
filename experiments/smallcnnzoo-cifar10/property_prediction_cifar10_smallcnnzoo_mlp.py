@@ -65,7 +65,7 @@ SENTINEL = -999.0
 RE_SHUFFLE = False  # shuffle model ids per seed before the re-split
 # SEEDS = list(range(10))
 SEEDS = [67]
-USE_EMBEDDINGS_CACHE = False  # if False, re-encode the zoo (slow)
+USE_EMBEDDINGS_CACHE = True  # if False, re-encode the zoo (slow)
 
 # MLP training hyperparameters
 EPOCHS = 200

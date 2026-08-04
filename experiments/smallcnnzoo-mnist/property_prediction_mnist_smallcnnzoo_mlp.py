@@ -68,7 +68,7 @@ SEEDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 USE_EMBEDDINGS_CACHE = True  # if False, re-encode the zoo (slow)
 
 # MLP training hyperparameters
-EPOCHS = 70
+EPOCHS = 100
 LR = 1e-3
 MLP_BATCH_SIZE = 64
 METRIC_KEYS = ["mse_train", "mse_test", "mae_train", "mae_test", "r2_train", "r2_test"]
