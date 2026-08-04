@@ -5,7 +5,7 @@ Encodes the unthi_mnist zoo at epoch 8 with the latest pretrained encoder
 ids to recall_prediction/mlp/embeddings.pt. If the cache exists, encoding is
 skipped. Then trains the 2-hidden-layer MLP head (eval_per_class_recall_MLP)
 once per seed in SEEDS, each time on a fresh 0.8/0.2 re-split by model id
-(RE_SHUFFLE), logs each run to Weights & Biases, and writes per-seed and
+(RESHUFFLE), logs each run to Weights & Biases, and writes per-seed and
 mean/std MSE / MAE / R^2 to a JSON file.
 
 Run from this directory with the project venv:
@@ -54,7 +54,7 @@ ZOO_ROOT = Path("/gpfs/scratch1/shared/mmiddelkoop/unthi_zoo/unthi_mnist/")
 OUT_DIR = Path("recall_prediction/mlp")
 os.makedirs(OUT_DIR, exist_ok=True)
 EMBEDDINGS_PT = OUT_DIR / "embeddings_sorted.pt"
-RESULTS_JSON = OUT_DIR / f"mlp_{ZOO}_smallcnnzoo_per_class_recall_sorted.json"
+RESULTS_JSON = OUT_DIR / f"mlp_{ZOO}_smallcnnzoo_per_class_recall_10runs_sorted_embeddings.json"
 
 EPOCH_LIST = [8]  # which epoch of the model zoo models to use
 EPOCH_SET = "8"  # key in the embeddings cache
@@ -62,13 +62,13 @@ ACC_CLASS_KEYS = [f"acc_class_{i}" for i in range(10)]
 DS_SPLIT = [0.8, 0.2]
 SPLITS = ["train", "test"]
 SENTINEL = -999.0
-RE_SHUFFLE = False  # shuffle model ids per seed before the re-split
+RESHUFFLE = False  # shuffle model ids per seed before the re-split
 # SEEDS = list(range(10))
-SEEDS = [67]
-USE_EMBEDDINGS_CACHE = False  # if False, re-encode the zoo (slow)
+SEEDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+USE_EMBEDDINGS_CACHE = True  # if False, re-encode the zoo (slow)
 
 # MLP training hyperparameters
-EPOCHS = 200
+EPOCHS = 70
 LR = 1e-3
 MLP_BATCH_SIZE = 64
 METRIC_KEYS = ["mse_train", "mse_test", "mae_train", "mae_test", "r2_train", "r2_test"]
@@ -174,7 +174,7 @@ per_seed = {}
 for seed in SEEDS:
     seed_everything(seed)
     models = list(range(n_models))
-    if RE_SHUFFLE:
+    if RESHUFFLE:
         random.Random(seed).shuffle(models)
     idx1 = int(DS_SPLIT[0] * n_models)
     train_mask = torch.isin(mid, torch.tensor(models[:idx1]))
@@ -187,7 +187,7 @@ for seed in SEEDS:
         dir=OUT_DIR,
         config={
             "seed": seed,
-            "re_shuffle": RE_SHUFFLE,
+            "re_shuffle": RESHUFFLE,
             "encoder": str(CHECKPOINT),
             "embeddings_source": str(EMBEDDINGS_PT),
             "epoch_set": EPOCH_SET,
@@ -202,7 +202,7 @@ for seed in SEEDS:
     )
     logging.info(f"Training MLP per-class recall head, seed {seed}")
     result = dstk.eval_per_class_recall_MLP(
-        model=None,
+        model=None, # type: ignore
         trainset=(z[train_mask], Y[train_mask]),
         testset=(z[test_mask], Y[test_mask]),
         target_keys=ACC_CLASS_KEYS,
@@ -222,7 +222,10 @@ for seed in SEEDS:
     )
 
 mean = {k: statistics.mean(r[k] for r in per_seed.values()) for k in METRIC_KEYS}
-std = {k: statistics.stdev(r[k] for r in per_seed.values()) for k in METRIC_KEYS}
+std = {
+    k: statistics.stdev(r[k] for r in per_seed.values()) if len(per_seed) > 1 else 0.0
+    for k in METRIC_KEYS
+}
 for k in METRIC_KEYS:
     logging.info(f"{k}: {mean[k]:.6f} +/- {std[k]:.6f}")
 
@@ -241,7 +244,7 @@ summary = {
     + [mlp[-1].out_features],
     "mlp_activation": "ReLU",
     "mlp_optimizer": "Adam",
-    "re_shuffle": RE_SHUFFLE,
+    "re_shuffle": RESHUFFLE,
     "seeds": SEEDS,
     "per_seed": per_seed,
     "mean": mean,

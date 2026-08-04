@@ -65,7 +65,7 @@ SENTINEL = -999.0
 RE_SHUFFLE = False  # shuffle model ids per seed before the re-split
 # SEEDS = list(range(10))
 SEEDS = [67]
-USE_EMBEDDINGS_CACHE = False  # if False, re-encode the zoo (slow)
+USE_EMBEDDINGS_CACHE = True  # if False, re-encode the zoo (slow)
 
 # MLP training hyperparameters
 EPOCHS = 200
@@ -222,7 +222,10 @@ for seed in SEEDS:
     )
 
 mean = {k: statistics.mean(r[k] for r in per_seed.values()) for k in METRIC_KEYS}
-std = {k: statistics.stdev(r[k] for r in per_seed.values()) for k in METRIC_KEYS}
+std = {
+    k: statistics.stdev(r[k] for r in per_seed.values()) if len(per_seed) > 1 else 0.0
+    for k in METRIC_KEYS
+}
 for k in METRIC_KEYS:
     logging.info(f"{k}: {mean[k]:.6f} +/- {std[k]:.6f}")
 
