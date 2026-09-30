@@ -1,0 +1,32 @@
+# SANE encoder svhn-v1.0_d4950_00000_2026-07-15_10-54-47 (checkpoint_000050, fetched from Snellius 2026-09-29) + the MLP per-class
+# recall head Moos trained on its embeddings (seed 67), for the wse unlearning pipeline.
+#
+#   PYTHONPATH=~/Documents/WSL/SANE uv run wse check-lens 'sane_wse:from_manifest(path=<this file>)' --zoo <indexed zoo>
+#
+# The head lives where it was dropped, in the wse repo, so this path is relative to a sibling checkout.
+ae_trial_dir: sane_pretraining/svhn/svhn-v1.0_d4950_00000_2026-07-15_10-54-47
+prediction_head: ../wse/SANE_test_models/svhn/mlp/mlp_head_seed67.pt
+
+# The head saw embeddings of tokens standardised per layer (DatasetTokens standardize=True). The
+# statistics were never written out, so these are recomputed with the same formula over the head's
+# own train split (seed-67 re-split of the zoo, 20991 models, epoch 8): per model, mean and
+# std of each layer's [weight | bias] rows, then mean of the means and root-mean-square of the stds.
+ignore_bn: true
+standardization:
+  conv1.weight:
+    mean: -0.009666375815868378
+    std: 0.5812779664993286
+  conv2.weight:
+    mean: -0.021769419312477112
+    std: 0.4905950725078583
+  conv3.weight:
+    mean: -0.02069941721856594
+    std: 0.463617742061615
+  dense.weight:
+    mean: 0.004666374064981937
+    std: 0.4829365909099579
+
+# Trained with map_to_canonical=True; alignment is off for the same reason as the ridge head
+# (measured marginal, infeasible per step, and the cluster's reference model is not reproducible).
+permutation_spec: null
+clamp_min: null

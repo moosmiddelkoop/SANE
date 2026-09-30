@@ -1,0 +1,34 @@
+# SANE encoder mnist-v2.0_6133f (checkpoint_000050, fetched from Snellius 2026-09-29) + the MLP
+# per-class recall head Moos trained on its embeddings (seed 67), for the wse unlearning pipeline.
+#
+#   PYTHONPATH=~/Documents/WSL/SANE uv run wse check-lens 'sane_wse:from_manifest(path=<this file>)' --zoo <indexed zoo>
+#
+# The head lives where it was dropped, in the wse repo, so this path is relative to a sibling checkout.
+ae_trial_dir: sane_pretraining/mnist/mnist-v2.0_6133f_00000_2026-07-15_11-48-49
+prediction_head: ../wse/SANE_test_models/mnist/mlp/mlp_head_seed67.pt
+
+# The head saw embeddings of tokens standardised per layer (DatasetTokens standardize=True). The
+# statistics were never written out, so these are recomputed with the same formula over the head's
+# own train split (seed-67 re-split of the zoo, 20997 models, epoch 8): per model, mean and std of
+# each layer's [weight | bias] rows, then mean of the means and root-mean-square of the stds.
+ignore_bn: true
+standardization:
+  conv1.weight:
+    mean: -0.033646948635578156
+    std: 0.5400742292404175
+  conv2.weight:
+    mean: -0.029105424880981445
+    std: 0.49808505177497864
+  conv3.weight:
+    mean: -0.020723119378089905
+    std: 0.46547931432724
+  dense.weight:
+    mean: 0.005424649454653263
+    std: 0.6412165760993958
+
+# Trained with map_to_canonical=True, like the ridge head; alignment is off for the same reason
+# (measured marginal on the ridge head, and infeasible per step). The DatasetTokens reference model
+# is the first directory of a filesystem-order listing shuffled with seed 42, so it cannot be
+# reproduced off the cluster anyway.
+permutation_spec: null
+clamp_min: null
