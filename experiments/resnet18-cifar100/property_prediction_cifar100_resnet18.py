@@ -4,6 +4,7 @@ from SANE.models.def_downstream_module import (
 
 from SANE.models.downstream_baselines import IdentityModel, LayerQuintiles
 from SANE.datasets.dataset_tokens import DatasetTokens
+from SANE.datasets.zoo_split import assert_same_split
 
 from pathlib import Path
 
@@ -83,6 +84,8 @@ def load_dataset_from_config(config, epoch_list, permutation_spec, map_to_canoni
         permutation_spec=permutation_spec,
         map_to_canonical=map_to_canonical,
     )
+    for dataset in (trainset, valset, testset):
+        assert_same_split(config, dataset)
     return trainset, valset, testset
 
 
@@ -95,7 +98,6 @@ def load_single_dataset(
         ds_info["zoo_path"].replace("[PosixPath(", "").replace(")]", "")[1:-1]
     )  # weird hack but hey
     standardize = config_ds["standardize"]
-    ds_split = config_ds["ds_split"]
     max_samples = config_ds["max_samples"]
     weight_threshold = config_ds["weight_threshold"]
     property_keys = {
@@ -117,13 +119,11 @@ def load_single_dataset(
         map_to_canonical=map_to_canonical,
         standardize=standardize,
         train_val_test=split,  # determines which dataset split to use
-        ds_split=ds_split,  #
         max_samples=max_samples,
         weight_threshold=weight_threshold,
         # filter_function=filter_fn,  # gets sample path as argument and returns True if model needs to be filtered out
         property_keys=property_keys,
         num_threads=12,
-        shuffle_path=True,
         verbosity=3,
         getitem="tokens+props",
         ignore_bn=ignore_bn,

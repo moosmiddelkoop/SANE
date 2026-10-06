@@ -535,8 +535,9 @@ def finetune_single(
         # assume we're loading from a regular zoo now.
         config["training::sample_epoch"] = sample_epoch
         path_list = [f for f in Path(path_to_samples).iterdir() if f.is_dir()]
-        # slice for no_samples
-        random.shuffle(path_list)
+        # slice for no_samples, same selection every run
+        path_list = sorted(path_list)
+        random.Random(42).shuffle(path_list)
         path_list = path_list[:no_samples]
         config["training::sample_number"] = None
         config["training::init_checkpoint_path"] = tune.grid_search(path_list)
@@ -748,8 +749,7 @@ def plot_populations(
             root_path,
         ],
         epoch_lst=epoch_lst_transfer,
-        train_val_test="train",
-        ds_split=[1.0, 0.0],
+        train_val_test="all",
         property_keys=property_keys,
         verbosity=0,
     )
@@ -763,8 +763,7 @@ def plot_populations(
             root_path,
         ],
         epoch_lst=epoch_lst_transfer,
-        train_val_test="train",
-        ds_split=[1.0, 0.0],
+        train_val_test="all",
         property_keys=property_keys,
         verbosity=0,
     )
@@ -778,8 +777,7 @@ def plot_populations(
             root_path,
         ],
         epoch_lst=epoch_lst_transfer,
-        train_val_test="train",
-        ds_split=[1.0, 0.0],
+        train_val_test="all",
         property_keys=property_keys,
         verbosity=0,
     )
@@ -793,8 +791,7 @@ def plot_populations(
             root_path,
         ],
         epoch_lst=epoch_lst_transfer,
-        train_val_test="train",
-        ds_split=[1.0, 0.0],
+        train_val_test="all",
         property_keys=property_keys,
         verbosity=0,
     )
@@ -807,8 +804,7 @@ def plot_populations(
             root_path,
         ],
         epoch_lst=epoch_lst_transfer,
-        train_val_test="train",
-        ds_split=[1.0, 0.0],
+        train_val_test="all",
         property_keys=property_keys,
         verbosity=0,
     )
@@ -821,8 +817,7 @@ def plot_populations(
             root_path,
         ],
         epoch_lst=epoch_lst_transfer,
-        train_val_test="train",
-        ds_split=[1.0, 0.0],
+        train_val_test="all",
         property_keys=property_keys,
         verbosity=0,
     )
@@ -836,8 +831,7 @@ def plot_populations(
             root_path,
         ],
         epoch_lst=epoch_lst_transfer,
-        train_val_test="train",
-        ds_split=[1.0, 0.0],
+        train_val_test="all",
         property_keys=property_keys,
         verbosity=0,
     )
@@ -851,8 +845,7 @@ def plot_populations(
             root_path,
         ],
         epoch_lst=epoch_lst_transfer,
-        train_val_test="train",
-        ds_split=[1.0, 0.0],
+        train_val_test="all",
         property_keys=property_keys,
         verbosity=0,
     )

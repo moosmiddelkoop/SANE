@@ -30,6 +30,7 @@ import torch
 from einops import repeat
 
 from SANE.datasets.dataset_tokens import DatasetTokens
+from SANE.datasets.zoo_split import assert_same_split
 from SANE.git_re_basin.git_re_basin import smallcnnzoo_permutation_spec
 from SANE.models.def_AE_module import AEModule
 from SANE.models.def_downstream_module import DownstreamTaskLearner
@@ -94,11 +95,9 @@ def build_split(epoch_list, split):
         standardize=True,
         tokensize=config["ae:i_dim"],
         train_val_test=split,
-        ds_split=DS_SPLIT,
         weight_threshold=100,
         max_samples=None,
         property_keys=property_keys,
-        shuffle_path=True,
         num_threads=12,
         verbosity=3,
         getitem="tokens+props",
@@ -131,6 +130,7 @@ for epoch_list in EPOCH_SETS:
     z_all, Y_all, mid_all, dirs_all, offset = [], [], [], [], 0
     for split in ["train", "val", "test"]:
         ds = build_split(epoch_list, split)
+        assert_same_split(config, ds)
         z, Y, mid = embed_and_targets(ds)
         z_all.append(z)
         Y_all.append(Y)

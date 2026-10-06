@@ -67,6 +67,9 @@ class TensorSamplingDataset(Dataset):
         self.p = p
         self.props = props
         self.transforms = transforms
+        # set at preprocessing: the zoo split and the models this dataset was built from
+        self.split_id = None
+        self.models = []
 
     def __len__(self):
         return self.w.shape[0]

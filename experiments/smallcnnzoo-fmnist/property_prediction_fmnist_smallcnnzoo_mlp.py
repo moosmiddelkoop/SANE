@@ -34,6 +34,7 @@ import wandb
 from einops import repeat
 
 from SANE.datasets.dataset_tokens import DatasetTokens
+from SANE.datasets.zoo_split import assert_same_split
 from SANE.git_re_basin.git_re_basin import smallcnnzoo_permutation_spec
 from SANE.models.def_AE_module import AEModule
 from SANE.models.def_downstream_module import DownstreamTaskLearner
@@ -60,7 +61,7 @@ EPOCH_LIST = [8]  # which epoch of the model zoo models to use
 EPOCH_SET = "8"  # key in the embeddings cache
 ACC_CLASS_KEYS = [f"acc_class_{i}" for i in range(10)]
 DS_SPLIT = [0.8, 0.2]
-SPLITS = ["train", "test"]
+SPLITS = ["train", "val", "test"]  # pooled: all models of the zoo
 SENTINEL = -999.0
 RE_SHUFFLE = False  # shuffle model ids per seed before the re-split
 # SEEDS = list(range(10))
@@ -116,11 +117,9 @@ else:
             standardize=True,
             tokensize=config["ae:i_dim"],
             train_val_test=split,
-            ds_split=DS_SPLIT,
             weight_threshold=100,
             max_samples=None,
             property_keys=property_keys,
-            shuffle_path=False,  # first 0.8xn_models are train, last 0.2xn_models are test
             num_threads=12,
             verbosity=3,
             getitem="tokens+props",
@@ -145,6 +144,7 @@ else:
     z_all, Y_all, mid_all, dirs_all, offset = [], [], [], [], 0
     for split in SPLITS:
         ds = build_split(split)
+        assert_same_split(config, ds)
         z, Y, mid = embed_and_targets(ds)
         z_all.append(z)
         Y_all.append(Y)
