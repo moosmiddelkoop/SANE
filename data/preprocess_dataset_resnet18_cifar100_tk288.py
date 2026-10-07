@@ -1,11 +1,18 @@
 # prepare data
 import logging
+import os
+
+# Single-threaded BLAS per worker: preprocessing parallelizes across CPUs via Ray,
+# so multi-threaded BLAS would oversubscribe cores. Must be set before torch import.
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 from pathlib import Path
 
-import torch
-
-from SANE.datasets.dataset_preprocessing import prepare_multiple_datasets
-from SANE.datasets.dataset_sampling_preprocessed import PreprocessedSamplingDataset
+from SANE.datasets.dataset_preprocessing_consolidated import prepare_multiple_datasets
 from SANE.git_re_basin.git_re_basin import (
     resnet18_permutation_spec,
 )
@@ -55,27 +62,14 @@ logging.basicConfig(level=logging.INFO)
 
 def prep_data():
     dataset_target_path = [
-        Path("/scratch-shared/mmiddelkoop/SANE/data/dataset_cifar100_token_288_ep60_std/"),
+        Path("/projects/prjs2156/shared/wsl/cifar100_resnet18/dataset_cifar100_token_288_ep60_std/"),
     ]
-    zoo_path = [Path("/scratch-shared/mmiddelkoop/SANE/data/cifar100_resnet18_kaiming_uniform_ep60_no_opt/").absolute()]
+    zoo_path = [Path("/projects/prjs2156/shared/wsl/cifar100_resnet18/cifar100_resnet18_kaiming_uniform_ep60_no_opt/")]
     zoo_path_and_permutation_spec_and_target_path = [
         (zoo_path[0], resnet18_permutation_spec, dataset_target_path[0]),
     ]
     configurations = create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_fn=None)
     prepare_multiple_datasets(configurations=configurations)
-
-    # create dataset dump for later use
-    ds_train = PreprocessedSamplingDataset(zoo_paths=dataset_target_path, split="train")
-    ds_val = PreprocessedSamplingDataset(zoo_paths=dataset_target_path, split="val")
-    ds_test = PreprocessedSamplingDataset(zoo_paths=dataset_target_path, split="test")
-
-    dataset = {
-        "trainset": ds_train,
-        "valset": ds_val,
-        "testset": ds_test,
-    }
-
-    torch.save(dataset, dataset_target_path[0] / "dataset.pt")
 
 
 def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_fn=None):
@@ -84,20 +78,23 @@ def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_
     map_to_canonical = True
     standardize = True
     ds_split = [0.7, 0.15, 0.15]
-    max_samples = 200
+    max_samples = None
     weight_threshold = float("inf")
-    num_threads = 5
-    shuffle_path = True
+    num_threads = len(os.sched_getaffinity(0))  # CPUs allocated to this SLURM job
+    shuffle_path = False
     windowsize = 2048
-    supersample = 50
+    # stored windows per model; the full sequence is 53704 tokens, so "auto" = 26.
+    # dataset.pt size ~ 1000 models x supersample x 14.8 MB (10 -> ~150 GB)
+    supersample = 10
     precision = "32"
     ignore_bn = False
     tokensize = 288
 
     # permutation spec
-    permutation_number_train = 200
+    # each stored sample holds permutation_number + 1 copies of its window (200 -> ~470 MB per sample)
+    permutation_number_train = 5
     permutations_per_sample_train = 5
-    permutation_number_test = 10
+    permutation_number_test = 5
     permutations_per_sample_test = 5
 
     page_size = 2**27

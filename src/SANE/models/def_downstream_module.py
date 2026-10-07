@@ -1,7 +1,7 @@
 import sys
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 sys.path.append("./../")
 import logging
@@ -131,19 +131,31 @@ class DownstreamTaskLearner:
             # if task: regression:
             try:
                 epx = trainset.epochs  # dataset_token_trojai doesn't have epochs
-                props_train = [trainset.properties[key][idx][jdx] for idx in range(len(trainset.properties[key])) for jdx in range(len(trainset.properties[key][idx]))]
+                props_train = [
+                    trainset.properties[key][idx][jdx]
+                    for idx in range(len(trainset.properties[key]))
+                    for jdx in range(len(trainset.properties[key][idx]))
+                ]
             except:
                 props_train = [trainset.properties[key][idx] for idx in range(len(trainset.properties[key]))]
             try:
                 epx = testset.epochs  # dataset_token_trojai doesn't have epochs
-                props_test = [testset.properties[key][idx][jdx] for idx in range(len(testset.properties[key])) for jdx in range(len(testset.properties[key][idx]))]
+                props_test = [
+                    testset.properties[key][idx][jdx]
+                    for idx in range(len(testset.properties[key]))
+                    for jdx in range(len(testset.properties[key][idx]))
+                ]
             except:
                 props_test = [testset.properties[key][idx] for idx in range(len(testset.properties[key]))]
             props_val = None
             if valset is not None:
                 try:
                     epx = valset.epochs  # dataset_token_trojai doesn't have epochs
-                    props_val = [valset.properties[key][idx][jdx] for idx in range(len(valset.properties[key])) for jdx in range(len(valset.properties[key][idx]))]
+                    props_val = [
+                        valset.properties[key][idx][jdx]
+                        for idx in range(len(valset.properties[key]))
+                        for jdx in range(len(valset.properties[key][idx]))
+                    ]
                 except:
                     props_val = [valset.properties[key][idx] for idx in range(len(valset.properties[key]))]
             if task_dx == "regression":
@@ -738,7 +750,11 @@ class DownstreamTaskLearner:
         for key in target_keys:
             try:
                 _ = dataset.epochs  # nested [model][epoch] properties
-                col = [dataset.properties[key][idx][jdx] for idx in range(len(dataset.properties[key])) for jdx in range(len(dataset.properties[key][idx]))]
+                col = [
+                    dataset.properties[key][idx][jdx]
+                    for idx in range(len(dataset.properties[key]))
+                    for jdx in range(len(dataset.properties[key][idx]))
+                ]
             except Exception:
                 col = [dataset.properties[key][idx] for idx in range(len(dataset.properties[key]))]
             cols.append(torch.tensor(col, dtype=torch.float))
@@ -1081,7 +1097,7 @@ class DownstreamTaskLearner:
             reg_best = 1e-5
         ####
         # with best regularization, iterate over test sets, compute predictions and calculate r2,kendal's tau
-        for key in testset_dict.keys():
+        for key in testset_dict:
             # get pair of embeddings,targets
             z_test_curr = testset_dict[key]["z_test"]
             prop_curr = torch.Tensor(testset_dict[key][test_prop_key])
@@ -1194,7 +1210,7 @@ class DownstreamTaskLearner:
         else:
             acc_val = None
         # iterate over testsets
-        for key in testset_dict.keys():
+        for key in testset_dict:
             # test
             z_test = testset_dict[key]["z_test"]
             z_test = z_test.float().to(torch.device("cpu"))
