@@ -11,6 +11,7 @@ from SANE.datasets.zoo_split import (
     check_dataset_splits,
     create_split,
     load_split,
+    resplit_train_val,
     select_models,
 )
 
@@ -125,3 +126,17 @@ def test_assert_same_split(tmp_path, zoo):
     with pytest.raises(SplitMismatchError, match="no split_id"):
         assert_same_split(config, dataset)
     assert_same_split({**config, "dataset::legacy_unverified_split": True}, dataset)
+
+
+def test_resplit_train_val_keeps_test_out(zoo):
+    split = create_split(zoo)
+    train, val, test = (split.models[s] for s in ("train", "val", "test"))
+    seen_val = set()
+    for seed in range(10):
+        new_train, new_val = resplit_train_val(train, val, seed)
+        assert sorted(new_train + new_val) == sorted(train + val)
+        assert len(new_val) == len(val)
+        assert not set(new_train + new_val) & set(test)
+        seen_val |= set(new_val)
+    assert seen_val - set(val), "resplitting should move models between train and val"
+    assert resplit_train_val(train, val, 3) == resplit_train_val(train, val, 3)

@@ -1,17 +1,17 @@
-"""R^2 spread of per-class recall prediction over 10 random train/val/test splits,
+"""R^2 spread of per-class recall prediction over 10 random train/val resplits,
 for epoch sets [0, 4, 8], [4, 8] and [8].
 
 A plain rerun of property_prediction_mnist_smallcnnzoo_multivariate.py is
-deterministic (the path shuffle in dataset_epochs.py is seeded with 42), so the
-spread must come from varying the train/val/test split. The only thing a
-different shuffle seed changes downstream is which *models* land in which
-split, so instead of rebuilding the (expensive) DatasetTokens 10 times we:
+deterministic (the split is fixed in the zoo's split.json), so the spread must
+come from varying which models are train and which are val. The test split
+always stays the fixed one from split.json. Instead of rebuilding the
+(expensive) DatasetTokens 10 times we:
 
   1. build + embed each epoch set once (identical pipeline / params to
      property_prediction_mnist_smallcnnzoo_multivariate.py),
-  2. pool the embeddings of all three splits with a per-sample model id,
-  3. resplit 10 times by model (70/15/15, seeds 0..9) and refit the
-     multivariate ridge head per split.
+  2. keep the embeddings of all three splits with a per-sample model id,
+  3. re-split train+val 10 times by model (seeds 0..9, val keeps its size)
+     and refit the multivariate ridge head, always testing on the test split.
 
 Run via recall_prediction_r2_spread.sh (sbatch).
 """
@@ -27,14 +27,13 @@ os.environ["NUMEXPR_NUM_THREADS"] = "4"
 
 import gc
 import json
-import random
 from pathlib import Path
 
 import torch
 from einops import repeat
 
 from SANE.datasets.dataset_tokens import DatasetTokens
-from SANE.datasets.zoo_split import assert_same_split
+from SANE.datasets.zoo_split import assert_same_split, resplit_train_val
 from SANE.git_re_basin.git_re_basin import smallcnnzoo_permutation_spec
 from SANE.models.def_AE_module import AEModule
 from SANE.models.def_downstream_module import DownstreamTaskLearner
@@ -56,7 +55,6 @@ RESULTS_JSON = OUT_DIR / "r2_spread.json"
 
 EPOCH_SETS = [[0, 4, 8], [4, 8], [8]]
 N_SEEDS = 10
-DS_SPLIT = [0.7, 0.15, 0.15]
 ACC_CLASS_KEYS = [f"acc_class_{i}" for i in range(10)]
 SENTINEL = -999.0
 
@@ -124,12 +122,12 @@ def embed_and_targets(ds):
     return z, Y, mid
 
 
-results = {"target_keys": ACC_CLASS_KEYS, "ds_split": DS_SPLIT, "epoch_sets": {}}
+results = {"target_keys": ACC_CLASS_KEYS, "epoch_sets": {}}
 
 for epoch_list in EPOCH_SETS:
     label = "-".join(str(e) for e in epoch_list)
     # --- build + embed once ---
-    z_all, Y_all, mid_all, offset = [], [], [], 0
+    z_all, Y_all, mid_all, offset, split_models = [], [], [], 0, {}
     for split in ["train", "val", "test"]:
         ds = build_split(epoch_list, split)
         assert_same_split(config, ds)
@@ -137,6 +135,8 @@ for epoch_list in EPOCH_SETS:
         z_all.append(z)
         Y_all.append(Y)
         mid_all.append(mid + offset)
+        split_models[split] = list(range(offset, offset + len(ds.data)))
+        results["split_id"] = ds.split_id
         offset += len(ds.data)
         del ds
         gc.collect()
@@ -145,16 +145,14 @@ for epoch_list in EPOCH_SETS:
     mid_all = torch.cat(mid_all)
     logging.info(f"epochs {label}: {z_all.shape[0]} samples from {offset} models")
 
-    # --- 10 random resplits by model, refit ridge head each time ---
+    # --- 10 random train/val resplits by model, refit ridge head each time ---
     seeds = {}
     for seed in range(N_SEEDS):
-        models = list(range(offset))
-        random.Random(seed).shuffle(models)
-        idx1 = int(DS_SPLIT[0] * offset)
-        idx2 = idx1 + int(DS_SPLIT[1] * offset)
+        # only train/val are re-split; the test models of split.json stay fixed
+        train, val = resplit_train_val(split_models["train"], split_models["val"], seed)
         masks = [
             torch.isin(mid_all, torch.tensor(chunk))
-            for chunk in (models[:idx1], models[idx1:idx2], models[idx2:])
+            for chunk in (train, val, split_models["test"])
         ]
         res = dstk.compute_closed_form_solution_multivariate(
             z_train=z_all[masks[0]],

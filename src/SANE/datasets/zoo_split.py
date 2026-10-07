@@ -180,6 +180,19 @@ def select_models(roots: Sequence[Path], split: str, max_samples=None):
     return paths, reference_candidates, "+".join(split_ids)
 
 
+def resplit_train_val(train: Sequence, val: Sequence, seed: int):
+    """Shuffle which models are train and which are val, for one seed.
+
+    For cross-validation and split-variance experiments. Only train and val
+    are pooled and re-cut; the test models are never passed in, so the fixed
+    test split stays held out. Val keeps its size from split.json.
+    Returns ``(train, val)``.
+    """
+    pool = list(train) + list(val)
+    random.Random(seed).shuffle(pool)
+    return pool[len(val) :], pool[: len(val)]
+
+
 def check_dataset_splits(datasets: Dict[str, object], what: str):
     """Check that the train/val/test datasets of one dataset.pt share one split.
 
