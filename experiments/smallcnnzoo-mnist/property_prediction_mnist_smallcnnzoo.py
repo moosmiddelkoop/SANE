@@ -32,6 +32,7 @@ from pathlib import Path
 import torch
 
 from SANE.datasets.dataset_tokens import DatasetTokens
+from SANE.datasets.zoo_split import assert_same_split
 from SANE.git_re_basin.git_re_basin import smallcnnzoo_permutation_spec
 from SANE.models.def_AE_module import AEModule
 from SANE.models.def_downstream_module import DownstreamTaskLearner
@@ -102,11 +103,9 @@ def build_split(split):
         standardize=True,
         tokensize=config["ae:i_dim"],          # 145
         train_val_test=split,
-        ds_split=[0.7, 0.15, 0.15],
         weight_threshold=100,
         max_samples=None,
         property_keys=property_keys,
-        shuffle_path=True,
         num_threads=12,
         verbosity=3,
         getitem="tokens+props",
@@ -117,6 +116,8 @@ def build_split(split):
 ds_train = build_split("train")
 ds_val = build_split("val")
 ds_test = build_split("test")
+for ds in (ds_train, ds_val, ds_test):
+    assert_same_split(config, ds)
 
 # ---------------------------------------------------------------------------
 # Linear (closed-form ridge) prediction head, one output per class

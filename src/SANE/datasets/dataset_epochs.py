@@ -1,7 +1,6 @@
 import copy
 import json
 import logging
-import random
 from pathlib import Path
 
 import ray
@@ -13,6 +12,8 @@ from SANE.datasets.dataset_auxiliaries import (
     test_checkpoint_for_nan,
     test_checkpoint_with_threshold,
 )
+
+from SANE.datasets.zoo_split import select_models
 
 from .progress_bar import ProgressBar
 
@@ -30,14 +31,12 @@ class ModelDatasetBaseEpochs(Dataset):
         root,
         epoch_lst=10,
         mode="checkpoint",
-        train_val_test="train",  # determines whcih dataset split to use
-        ds_split=[0.7, 0.3],  #
+        train_val_test="train",  # "train", "val" or "test" from the zoo's split.json; "all" for populations
         max_samples=None,
         weight_threshold=float("inf"),
         filter_function=None,  # gets sample path as argument and returns True if model needs to be filtered out
         property_keys=None,
         num_threads=4,
-        shuffle_path=True,
         verbosity=0,
     ):
         self.epoch_lst = epoch_lst
@@ -46,7 +45,6 @@ class ModelDatasetBaseEpochs(Dataset):
         self.weight_threshold = weight_threshold
         self.property_keys = copy.deepcopy(property_keys)
         self.train_val_test = train_val_test
-        self.ds_split = ds_split
 
         ### initialize data over epochs #####################
         if not isinstance(epoch_lst, list):
@@ -60,32 +58,17 @@ class ModelDatasetBaseEpochs(Dataset):
         if not isinstance(root, list):
             root = [root]
 
-        ## make path an absolute pathlib Path
-        for rdx in root:
-            if isinstance(rdx, str):
-                rdx = Path(rdx)
-        self.root = root
+        self.root = [Path(rdx) for rdx in root]
 
-        # get list of folders in directory
-        self.path_list = []
-        for rdx in self.root:
-            pth_lst_tmp = [f for f in rdx.iterdir() if f.is_dir()]
-            self.path_list.extend(pth_lst_tmp)
-
-        # shuffle self.path_list
-        if shuffle_path:
-            random.shuffle(self.path_list)
-        else:
-            # (length, string) sorts unpadded numeric names in numeric order
-            self.path_list.sort(key=lambda p: (len(p.name), p.name))
-
-        ### Split Train and Test set ###########################################################################
-        if max_samples is not None:
-            self.path_list = self.path_list[:max_samples]
+        # the split is fixed per zoo in <zoo>/split.json, see SANE.datasets.zoo_split
+        self.path_list, reference_candidates, self.split_id = select_models(
+            self.root, train_val_test, max_samples=max_samples
+        )
+        logging.info(f"{train_val_test} split {self.split_id}: {len(self.path_list)} models")
 
         ### get reference model ###########################################################################
-        # iterate over path list
-        for pdx in self.path_list:
+        # iterate over the train models, so all splits share one reference
+        for pdx in reference_candidates:
             for edx in range(len(epoch_lst)):
                 ep = epoch_lst[-edx - 1]
                 # try to load model at last epoch
@@ -112,38 +95,6 @@ class ModelDatasetBaseEpochs(Dataset):
         config_path = ref_path.joinpath("params.json")
         ref_config = json.load(config_path.open("r"))
         self.reference_config = ref_config
-
-        ### Split Train and Test set ###########################################################################
-        assert abs(sum(self.ds_split) - 1.0) < 1e-8, (
-            f"dataset splits {self.ds_split} sum up to {sum(self.ds_split)} but should equal to 1"
-        )
-        # two splits
-        if len(self.ds_split) == 2:
-            if self.train_val_test == "train":
-                idx1 = int(self.ds_split[0] * len(self.path_list))
-                self.path_list = self.path_list[:idx1]
-            elif self.train_val_test == "test":
-                idx1 = int(self.ds_split[0] * len(self.path_list))
-                self.path_list = self.path_list[idx1:]
-            else:
-                logging.error("validation split requested, but only two splits provided.")
-                raise NotImplementedError("validation split requested, but only two splits provided.")
-        # three splits
-        elif len(self.ds_split) == 3:
-            if self.train_val_test == "train":
-                idx1 = int(self.ds_split[0] * len(self.path_list))
-                self.path_list = self.path_list[:idx1]
-            elif self.train_val_test == "val":
-                idx1 = int(self.ds_split[0] * len(self.path_list))
-                idx2 = idx1 + int(self.ds_split[1] * len(self.path_list))
-                self.path_list = self.path_list[idx1:idx2]
-            elif self.train_val_test == "test":
-                idx1 = int(self.ds_split[0] * len(self.path_list))
-                idx2 = idx1 + int(self.ds_split[1] * len(self.path_list))
-                self.path_list = self.path_list[idx2:]
-        else:
-            logging.warning("dataset splits are unintelligble. Load 100% of dataset")
-            pass
 
         ### prepare data lists ###############
         data = []

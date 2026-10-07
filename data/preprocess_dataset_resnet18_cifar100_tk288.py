@@ -32,12 +32,7 @@ logging.basicConfig(level=logging.INFO)
 #     ds = PropertyDataset(
 #         root,  # path from which to load the dataset
 #         epoch_lst=epoch_list,  # list of epochs to load
-#         train_val_test="train",  # determines whcih dataset split to use
-#         ds_split=[
-#             1.0,
-#             0.0,
-#             0.0,
-#         ],  # sets ration between [train, test] or [train, val, test]
+#         train_val_test="all",  # all models: this only infers an accuracy quantile
 #         property_keys=property_keys,  # keys of properties to load
 #     )
 #     acc_threshold = torch.quantile(torch.tensor(ds.properties["test_acc"]), q=quantile)
@@ -77,11 +72,9 @@ def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_
     epoch_list = [60]
     map_to_canonical = True
     standardize = True
-    ds_split = [0.7, 0.15, 0.15]
     max_samples = None
     weight_threshold = float("inf")
     num_threads = len(os.sched_getaffinity(0))  # CPUs allocated to this SLURM job
-    shuffle_path = False
     windowsize = 2048
     # stored windows per model; the full sequence is 53704 tokens, so "auto" = 26.
     # dataset.pt size ~ 1000 models x supersample x 14.8 MB (10 -> ~150 GB)
@@ -120,11 +113,9 @@ def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_
                     "permutation_spec": permutation_spec,
                     "map_to_canonical": map_to_canonical,
                     "standardize": standardize,
-                    "ds_split": ds_split,
                     "max_samples": max_samples,
                     "weight_threshold": weight_threshold,
                     "num_threads": num_threads,
-                    "shuffle_path": shuffle_path,
                     "windowsize": windowsize,
                     "supersample": supersample,
                     "precision": precision,

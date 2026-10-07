@@ -35,12 +35,7 @@ logging.basicConfig(level=logging.INFO)
 #     ds = PropertyDataset(
 #         root,  # path from which to load the dataset
 #         epoch_lst=epoch_list,  # list of epochs to load
-#         train_val_test="train",  # determines whcih dataset split to use
-#         ds_split=[
-#             1.0,
-#             0.0,
-#             0.0,
-#         ],  # sets ration between [train, test] or [train, val, test]
+#         train_val_test="all",  # all models: this only infers an accuracy quantile
 #         property_keys=property_keys,  # keys of properties to load
 #     )
 #     acc_threshold = torch.quantile(torch.tensor(ds.properties["test_acc"]), q=quantile)
@@ -97,7 +92,6 @@ def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_
     epoch_list = [0, 1, 2, 3, 4, 5, 6, 7, 8]
     map_to_canonical = True
     standardize = True
-    ds_split = [0.7, 0.15, 0.15]
     max_samples = None  # for smoke tests (truncates the amount of models being preprocessed)
     weight_threshold = 100  # drops any checkoint with blown up weights of a magnitude above this threshold
     # use all CPU cores allocated to this job (respects the SLURM/cgroup allocation
@@ -107,7 +101,6 @@ def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_
     # except AttributeError:
     #     num_threads = os.cpu_count()
     num_threads = 12
-    shuffle_path = True
     windowsize = 58
     supersample = 1
     precision = "32"
@@ -142,11 +135,9 @@ def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_
                     "permutation_spec": permutation_spec,
                     "map_to_canonical": map_to_canonical,
                     "standardize": standardize,
-                    "ds_split": ds_split,
                     "max_samples": max_samples,
                     "weight_threshold": weight_threshold,
                     "num_threads": num_threads,
-                    "shuffle_path": shuffle_path,
                     "windowsize": windowsize,
                     "supersample": supersample,
                     "precision": precision,

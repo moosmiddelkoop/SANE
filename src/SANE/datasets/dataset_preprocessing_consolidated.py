@@ -18,9 +18,14 @@ from SANE.datasets.augmentations import (
 )
 from SANE.datasets.dataset_sampling_preprocessed import TensorSamplingDataset
 from SANE.datasets.dataset_tokens import DatasetTokens
+from SANE.datasets.zoo_split import SPLITS, check_dataset_splits
 from SANE.git_re_basin.git_re_basin import (
     PermutationSpec,
 )
+
+
+# split settings that now live in <zoo>/split.json
+REMOVED_CONFIG_KEYS = ("ds_split", "shuffle_path")
 
 
 def prepare_multiple_datasets(configurations: List[Dict[str, Any]]):
@@ -36,6 +41,12 @@ def prepare_multiple_datasets(configurations: List[Dict[str, Any]]):
     """
     collected = {}
     for config in configurations:
+        stale = [key for key in REMOVED_CONFIG_KEYS if key in config]
+        if stale:
+            raise ValueError(
+                f"config keys {stale} are no longer used: every zoo has one fixed split in "
+                "<zoo>/split.json (see SANE.datasets.zoo_split). Remove them from the config."
+            )
         datasets = prepare_dataset(
             dataset_target_path=config["dataset_target_path"],
             zoo_path=config["zoo_path"],
@@ -43,7 +54,6 @@ def prepare_multiple_datasets(configurations: List[Dict[str, Any]]):
             permutation_spec=config["permutation_spec"],
             map_to_canonical=config.get("map_to_canonical", False),
             standardize=config.get("standardize", "l2_ind"),
-            ds_split=config.get("ds_split", [0.7, 0.15, 0.15]),
             splits=config.get("splits", ["train"]),
             max_samples=config.get("max_samples", 1000),
             weight_threshold=config.get("weight_threshold", 15),
@@ -60,7 +70,6 @@ def prepare_multiple_datasets(configurations: List[Dict[str, Any]]):
             ),
             filter_fn=config.get("filter_fn", None),
             num_threads=config.get("num_threads", 12),
-            shuffle_path=config.get("shuffle_path", True),
             windowsize=config.get("windowsize", 160),
             supersample=config.get("supersample", "auto"),
             precision=config.get("precision", 16),
@@ -77,7 +86,8 @@ def prepare_multiple_datasets(configurations: List[Dict[str, Any]]):
             {f"{split}set": ds for split, ds in datasets.items()}
         )
     for target_path, datasets in collected.items():
-        logging.info(f"saving consolidated dataset.pt to {target_path}")
+        split_id = check_dataset_splits(datasets, what=str(target_path))
+        logging.info(f"saving consolidated dataset.pt (split {split_id}) to {target_path}")
         torch.save(datasets, target_path.joinpath("dataset.pt"))
 
 
@@ -109,7 +119,6 @@ def prepare_dataset(
     permutation_spec: PermutationSpec,
     map_to_canonical: bool = True,
     standardize: bool = True,
-    ds_split: list = [0.7, 0.15, 0.15],
     splits: list = ["train", "val", "test"],
     max_samples: int = 1000,
     weight_threshold: int = 15,
@@ -123,7 +132,6 @@ def prepare_dataset(
     },
     filter_fn: Any = None,
     num_threads: int = 12,
-    shuffle_path: bool = True,
     windowsize: int = 160,
     supersample: Union[str, int] = "auto",
     precision: str = "16",
@@ -145,13 +153,11 @@ def prepare_dataset(
         permutation_spec: PermutationSpec to use.
         map_to_canonical: Whether to map models to canonical from using git-rebasin.
         standardize: Whether to standardize the weights (per layer).
-        ds_split: Dataset split, in "train" "val" "test".
-        max_samples: Maximum number of samples, split by model path to prevent leakage, distributed over splits.
+        max_samples: Maximum number of models of the zoo; each split keeps its share of its split.json list.
         weight_threshold: Weight threshold in 1-norm.
         property_keys: Property keys (load properties).
         filter_fn: function to filter out models with
         num_threads: Number of threads.
-        shuffle_path: Whether to shuffle the path.
         supersample: Supersample.
         ignore_bn: weather to load batchnorm paramters
         tokensize: set dimension of tokens. set to 0 to discover size.
@@ -168,6 +174,9 @@ def prepare_dataset(
     # load conventional datasets
 
     datasets = {}
+    unknown = set(splits) - set(SPLITS)
+    if unknown:
+        raise ValueError(f"splits must be among {SPLITS}, got {sorted(unknown)}")
     for split_key in splits:
         logging.info(f"load {split_key} dataset")
         permutation_number = permutation_number_train if split_key == "train" else permutation_number_test
@@ -181,13 +190,11 @@ def prepare_dataset(
             permutation_number=permutation_number,
             permutations_per_sample=permutations_per_sample,
             standardize=standardize,
-            ds_split=ds_split,
             max_samples=max_samples,
             weight_threshold=weight_threshold,
             property_keys=property_keys,
             filter_fn=filter_fn,
             num_threads=num_threads,
-            shuffle_path=shuffle_path,
             windowsize=windowsize,
             supersample=supersample,
             precision=precision,
@@ -209,7 +216,6 @@ def preprocess_single_split(
     permutation_number: int = 0,
     permutations_per_sample: int = 0,
     standardize: bool = True,
-    ds_split: list = [0.7, 0.15, 0.15],
     max_samples: int = 1000,
     weight_threshold=15,
     property_keys: dict = {
@@ -222,7 +228,6 @@ def preprocess_single_split(
     },
     filter_fn: Any = None,
     num_threads: int = 12,
-    shuffle_path: bool = True,
     windowsize: int = 160,
     supersample: Union[str, int] = "auto",
     precision: str = "16",
@@ -243,13 +248,11 @@ def preprocess_single_split(
         permutation_number: Number of permutations to prepare.
         permutations_per_sample: Number of permutations per sample (each sample is a stack of several permuted versions).
         standardize: Whether to standardize the weights (per layer).
-        ds_split: Dataset split, in "train" "val" "test".
-        max_samples: Maximum number of samples, split by model path to prevent leakage, distributed over splits.
+        max_samples: Maximum number of models of the zoo; each split keeps its share of its split.json list.
         weight_threshold: Weight threshold in 1-norm.
         property_keys: Property keys (load properties).
         filter_fn: function to filter out models with
         num_threads: Number of threads.
-        shuffle_path: Whether to shuffle the path.
         windowsize: Windowsize.
         supersample: Supersample.
         split: Split to use.
@@ -279,14 +282,12 @@ def preprocess_single_split(
         map_to_canonical=map_to_canonical,
         standardize=standardize,
         train_val_test=split,  # determines which dataset split to use
-        ds_split=ds_split,  #
         max_samples=max_samples,
         weight_threshold=weight_threshold,
         precision=precision,
         filter_function=filter_fn,  # gets sample path as argument and returns True if model needs to be filtered out
         property_keys=property_keys,
         num_threads=num_threads,  # these were hardcoded before (to 12)
-        shuffle_path=shuffle_path,  # these were hardcoded before (to True)
         verbosity=3,
         mode="checkpoint",  # apply permutation on checkpoint
         getitem="tokens+props",
@@ -342,6 +343,9 @@ def preprocess_single_split(
     # (refcount writes dirty every page), so memory scales with
     # num_workers x dataset size
     split_dataset = stack_dataset(dataset, num_workers=min(num_threads, 8))
+    # carry the split along, so pretraining can verify train/val/test
+    split_dataset.split_id = dataset.split_id
+    split_dataset.models = [str(path) for path in dataset.path_list]
 
     # get metadata and write to disk
     # get full sample and infer dimensions
@@ -366,14 +370,14 @@ def preprocess_single_split(
         "permutation_number": permutation_number,
         "permutations_per_sample": permutations_per_sample,
         "standardize": standardize,
-        "ds_split": ds_split,
+        "split_id": dataset.split_id,
         "max_samples": max_samples,
         "weight_threshold": weight_threshold,
         "property_keys": property_keys,
         "num_threads": num_threads,
-        "shuffle_path": shuffle_path,
         "windowsize": windowsize,
         "split": split,
+        "models": [str(path) for path in dataset.path_list],
         "max_positions": pos.max(dim=0).values.tolist(),
     }
     # add info json to the same path
