@@ -41,13 +41,11 @@ class DatasetTokens(ModelDatasetBaseEpochs):
         map_to_canonical: bool = False,
         standardize: bool = True,  # wether or not to standardize the data
         tokensize: int = 0,
-        train_val_test="train",
-        ds_split=[0.7, 0.3],
+        train_val_test="train",  # "train", "val" or "test" from the zoo's split.json
         weight_threshold: float = float("inf"),
         max_samples: Optional[int] = 0,  # limit the number of models to integer number (full model trajectory, all epochs)
         filter_function=None,  # gets sample path as argument and returns True if model needs to be filtered out
         property_keys=None,
-        shuffle_path: bool = True,
         num_threads=4,
         verbosity=0,
         precision="32",
@@ -62,14 +60,12 @@ class DatasetTokens(ModelDatasetBaseEpochs):
             epoch_lst=epoch_lst,
             mode="checkpoint",
             train_val_test=train_val_test,
-            ds_split=ds_split,
             weight_threshold=weight_threshold,
             max_samples=max_samples,
             filter_function=filter_function,
             property_keys=property_keys,
             num_threads=num_threads,
             verbosity=verbosity,
-            shuffle_path=shuffle_path,
         )
         self.mode = mode
 

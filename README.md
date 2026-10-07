@@ -51,6 +51,12 @@ The preprocessed datasets have no specific dependency requirements, other than r
 Please note that this is not the exact models used in the paper and will therefore produce different results. The full zoos can be downloaded from [modelzoos.cc](https://modelzoos.cc/) and used in the same way as the zoo sample.  
 
 ### Preprocessing model zoos
+Every zoo first gets a fixed train/val/test split, created once:
+```bash
+uv run data/create_split.py <zoo dir>
+```
+This writes `<zoo dir>/split.json` (70/15/15 by default). Preprocessing, pretraining and all downstream tasks read their models from this file, and fail if it is missing, so train, val and test can never mix. The file is never overwritten.
+
 Preprocessing turns a zoo of raw checkpoints into the tokenized dataset that pretraining reads. The consolidated pipeline (`SANE.datasets.dataset_preprocessing_consolidated`) runs, per split: discover model directories in the zoo → load the checkpoints listed in `epoch_list` in parallel via Ray → map permutation symmetries to a canonical form with git-re-basin (`map_to_canonical`) → standardize weights per layer → tokenize each checkpoint into `windowsize` tokens of size `tokensize` → stack everything into in-RAM tensors, saved as a single `<out_dir>/dataset.pt` plus `dataset_info_<split>.json` and `dataset_normalization_<split>.json`.
 
 For the small CNN zoos (3 conv layers + dense head), the entry point is

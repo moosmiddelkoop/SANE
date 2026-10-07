@@ -12,6 +12,7 @@ from pathlib import Path
 
 # import model_definitions
 from SANE.models.def_AE_module import AEModule
+from SANE.datasets.zoo_split import check_dataset_splits
 
 from torch.utils.data import DataLoader
 
@@ -353,6 +354,19 @@ class AE_trainer:
             trainset = dataset["trainset"]
             testset = dataset["testset"]
             valset = dataset.get("valset", None)
+
+            # train/val/test must come from one fixed zoo split, see SANE.datasets.zoo_split
+            if self.config.get("dataset::legacy_unverified_split", False):
+                logging.warning(
+                    "dataset::legacy_unverified_split is set: train/val/test are NOT checked "
+                    "for coming from one split and may overlap"
+                )
+            else:
+                split_id = check_dataset_splits(
+                    {"trainset": trainset, "valset": valset, "testset": testset},
+                    what=str(self.config["dataset::dump"]),
+                )
+                logging.info(f"dataset split {split_id} verified")
 
             # transfer trafo_dataset to datasets
             if trafo_dataset is not None:
