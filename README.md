@@ -42,6 +42,10 @@ To get started with a small experiment, navigate to `./data/` and run
 bash download_cifar10_cnn_sample.sh
 ```
 This will download and unzip a small model zoo example with CNN models trained on CIFAR-10. 
+Before anything else, give the zoo its fixed train/val/test split (see [Create the zoo's split first](#create-the-zoos-split-first)):
+```bash
+uv run create_split.py <zoo dir>
+```
 Training on large model zoos requires preprocessing for training efficiency. We provide code to preprocess training samples. To compile those datasets, run
 ```bash
 python3 preprocess_dataset_cnn_cifar10_sample.py
@@ -51,13 +55,21 @@ The preprocessed datasets have no specific dependency requirements, other than r
 
 Please note that this is not the exact models used in the paper and will therefore produce different results. The full zoos can be downloaded from [modelzoos.cc](https://modelzoos.cc/) and used in the same way as the zoo sample.  
 
-### Preprocessing model zoos
-Every zoo first gets a fixed train/val/test split, created once:
+### Create the zoo's split first
+The first thing you do with a new model zoo, before preprocessing, pretraining or any downstream task, is fix its train/val/test split. Do this once per zoo:
 ```bash
 uv run data/create_split.py <zoo dir>
 ```
-This writes `<zoo dir>/split.json` (70/15/15 by default). Preprocessing, pretraining and all downstream tasks read their models from this file, and fail if it is missing, so train, val and test can never mix. The file is never overwritten.
+This writes `<zoo dir>/split.json`: a seeded shuffle of the model directories, cut 70/15/15 (change with `--ratios 0.8 0.1 0.1` and `--seed`). Every later step reads its models from this file, so train, val and test can never mix, whatever script or config you use. There is no split setting anywhere else.
 
+- **No split, no data.** Without `split.json`, every dataset class stops with `MissingSplitError` and prints the command above.
+- **Created once, never changed.** `create_split.py` refuses to overwrite an existing split. Loading fails if the file was edited by hand, or if model directories were added to or removed from the zoo.
+- **Checked all the way through.** Each split has a `split_id`. Preprocessing stores it with the dataset, pretraining checks that train/val/test share it and do not overlap, and downstream scripts check that the encoder was pretrained on the same split.
+- **Starting over** means deleting `split.json` by hand. Every dataset and encoder built on the old split then stops loading, on purpose: re-run preprocessing and pretraining.
+- **Cross-validation** may re-split train and val (`SANE.datasets.zoo_split.resplit_train_val`). The test split never moves.
+- **Data made before `split.json` existed** has no `split_id` and fails these checks. To use it anyway, knowing its splits may overlap, set `config["dataset::legacy_unverified_split"] = True`.
+
+### Preprocessing model zoos
 Preprocessing turns a zoo of raw checkpoints into the tokenized dataset that pretraining reads. The consolidated pipeline (`SANE.datasets.dataset_preprocessing_consolidated`) runs, per split: discover model directories in the zoo → load the checkpoints listed in `epoch_list` in parallel via Ray → map permutation symmetries to a canonical form with git-re-basin (`map_to_canonical`) → standardize weights per layer → tokenize each checkpoint into `windowsize` tokens of size `tokensize` → stack everything into in-RAM tensors, saved as a single `<out_dir>/dataset.pt` plus `dataset_info_<split>.json` and `dataset_normalization_<split>.json`.
 
 For the small CNN zoos (3 conv layers + dense head), the entry point is
