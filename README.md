@@ -27,8 +27,9 @@ Learning representations of well-trained neural network models holds the promise
 ## Code Structure
 
 - **data/**: Scripts for data preprocessing and loading.
-- **experiments/**: Example experiments to pre-train SANE on a CIFAR100-ResNet18 zoo, predict propeties and sample models
+- **experiments/**: One directory per model zoo (`resnet18-cifar100/`, `cnn-cifar10/`, `smallcnnzoo-{mnist,fmnist,cifar10,svhn}/`) with scripts to pre-train SANE, predict properties and sample models. Scripts that run long have a SLURM batch file (`.sh`) with the same name.
 - **src/**: contains the SANE package to preprocess model checkpoint datasets, pre-train SANE, and perform discriminative and generative downstream tasks.
+- **reports/**: Short write-ups of training issues found during our runs (a loss spike, a val-loss shift).
 
 ## Running Experiments
 We include code to run example experiments and showcase how to use our code. 
@@ -57,29 +58,46 @@ For the small CNN zoos (3 conv layers + dense head), the entry point is
 ```bash
 python3 preprocess_dataset_smallcnnzoo.py --in_dir=<zoo dir> --out_dir=<target dir>
 ```
-in `./data/`. All datasets of this zoo family (MNIST, Fashion-MNIST, CIFAR-10, SVHN) share the same architecture and hence the same token geometry (`tokensize=145`, `windowsize=58`, epochs 0–8), so one script serves them all — `data/preprocess_all_unthi.sh` is a SLURM batch script that runs them back to back.
+in `./data/`. All datasets of this zoo family (MNIST, Fashion-MNIST, CIFAR-10, SVHN) share the same architecture and hence the same token geometry (`tokensize=145`, `windowsize=58`, epochs 0–8), so one script serves them all — `data/preprocess_all_unthi.sh` is a SLURM batch script that runs them back to back (about 5 hours in total). The raw zoo layout is described in `CWI-README.md`.
 
 > **Note — memory.** The consolidated pipeline holds an entire split in RAM: all raw checkpoints as a graph of small Python/tensor objects (~4–5 GB for a 30k-model small-CNN zoo) plus the preallocated output tensors. The final stacking step iterates with a `DataLoader` whose forked workers copy-on-write duplicate that object graph, so peak memory scales with *workers × zoo size*; stacking workers are therefore capped at 8 regardless of `num_threads`. Budget roughly `parent process + 8 × object-graph size` (~50 GB for a 30k-model zoo) when sizing a SLURM allocation.
 
+> **Note — why one `dataset.pt` ("consolidation").** The original pipeline (`SANE.datasets.dataset_preprocessing`) wrote one `.pt` file per sample and read every file again in each training epoch. For a 30k-model zoo that is 200k+ files, and file reads limited pretraining to about one epoch per hour. The consolidated pipeline stores all samples as stacked tensors (`TensorSamplingDataset`) in one file, which pretraining loads into RAM once. The original pipeline is still available. `data/consolidate_preprocessed.py` converts a zoo that was preprocessed with it.
+>
+> The change also changed the order of the val/test samples: all checkpoints of one model are now next to each other. Val/test batches are not shuffled, so each batch holds near-copies of the same model, and the contrastive val/test loss is much higher. Model quality did not change. Do not compare contrastive val/test loss between runs from before and after the change; compare downstream results instead. Details: `reports/contrastive-val-loss-discrepancy.md`.
+
 ### Pretraining SANE
-Code to pretrain SANE on the sample zoo is contained in `experiments/pretrain_sane_cifar100_resnet18.py`. The code relies on ray.tune to manage resources, but currently only runs a single config. 
+Code to pretrain SANE on the ResNet-18 zoo is contained in `experiments/resnet18-cifar100/pretrain_sane_cifar100_resnet18.py`. The code relies on ray.tune to manage resources, but currently only runs a single config. 
 To vary any of the configurations, exchange the value with `tune.grid_search([value_1, ..., value_n])`. To run the experiment, run
 ```
 python3 pretrain_sane_cifar100_resnet18.py
 ```
-in `experiments/`
+in `experiments/resnet18-cifar100/`.
+
+For the small CNN zoos, submit `experiments/smallcnnzoo-<zoo>/pretrain_sane_<zoo>_smallcnnzoo.sh` with `sbatch`. These runs use gradient clipping and log to Weights & Biases.
+
+> **Note — seeds.** Each entry script sets one seed with `seed_everything(SEED)` from `SANE.utils` and passes the same value as `config["seed"]`. The library itself sets no fixed seeds, so the train/val/test split changes with this seed.
 
 ### Using SANE embeddings to predict properties
 SANE embeddings preserve the sequential decomposition of models. This enables a more fine-granual analysis of models compared to global model embeddings. The figure below shows a comparison between SANE embeddings (right) and features used in the WeightWatcher library (left), which are based on the eigendecomposition of the weight matrices. Both show similar trends of layer properties in ResNet models, but SANE appears to pick up on additional signals in the middle layers.
 ![Analysis of models: comparing weight matrix eigendecomposition features (left) to SANE embeddings (right)](assets/analysis_layers.png)
 
-We provide code to use SANE embeddings to predict such model properties in `experiments/property_prediction_cifar100_resnet18.py`. It assumes downloaded dataset and pre-trained SANE as described above. Within `property_prediction_cifar100_resnet18.py`, set the path to the pretrained SANE model and epoch. then run
+We provide code to use SANE embeddings to predict such model properties in `experiments/resnet18-cifar100/property_prediction_cifar100_resnet18.py`. It assumes downloaded dataset and pre-trained SANE as described above. Within `property_prediction_cifar100_resnet18.py`, set the path to the pretrained SANE model and epoch. then run
 ```bash
 python3 property_prediction_cifar100_resnet18.py
 ```
-within `experiments`. This will compute the property prediction results from both SANE embeddings and weight-statistic baselines and save them in a `json`.
+within `experiments/resnet18-cifar100/`. This will compute the property prediction results from both SANE embeddings and weight-statistic baselines and save them in a `json`.
 
 > **Note — downstream encoding must match pretraining preprocessing.** The property-prediction and sampling/finetune scripts re-tokenize raw checkpoints before passing them through the trained SANE encoder. The `permutation_spec`, `map_to_canonical`, `ignore_bn`, and standardization settings used here **must** match what was used when the pretraining dataset was generated (see `data/preprocess_dataset_*.py`); otherwise embeddings will be off-distribution and downstream metrics will silently degrade. The `epoch_list` is the only preprocessing knob that is free to differ — it just picks which checkpoints to encode.
+
+### Predicting per-class recall (small CNN zoos)
+For our unlearning work we predict the recall of each of the 10 classes (`acc_class_0` … `acc_class_9`) from a model's SANE embedding. Each `experiments/smallcnnzoo-<zoo>/` directory has `property_prediction_<zoo>_smallcnnzoo_mlp.py`, submitted via its `.sh`. The script:
+1. encodes the final checkpoint (epoch 8) of every zoo model, and caches the embeddings in `recall_prediction/mlp/embeddings_sorted.pt`,
+2. splits the models by sorted name: the first 80 % train, the last 20 % test,
+3. trains a small MLP head (two hidden layers of 128 units) once per seed,
+4. writes MSE, MAE and R² per seed, plus mean and standard deviation, to a JSON file.
+
+A second run re-uses the cached embeddings and only trains the heads. `experiments/smallcnnzoo-mnist/` also contains linear-head variants and analyses of how much the results vary between splits.
 
 ### Generating Models
 Generating models can provide initializations even for new tasks and architectures that give an advantage over random initializations, see the Figure below.
@@ -91,7 +109,7 @@ We further provide experiment code for the sample dataset of cnns and a larger r
 ```bash
 python3 sample_finetune_cifar100_resnet18.py
 ```
-within `experiments`. Generating models requires a pre-processed CIFAR100 dataset that can be generated by running
+within `experiments/resnet18-cifar100/`. Generating models requires a pre-processed CIFAR100 dataset that can be generated by running
 ```bash
 python3 prepare_cifar100_dataset.py
 ```
