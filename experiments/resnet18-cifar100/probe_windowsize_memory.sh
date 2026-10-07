@@ -20,4 +20,3 @@ for pair in "256 32" "512 32" "1024 32" "1536 32" "2048 32" "2048 16" "2048 8"; 
     set -- $pair
     python probe_windowsize_memory.py --windowsize=$1 --batchsize=$2
 done
-grep -h RESULT "logs/probe_windowsize_memory_${SLURM_JOB_ID}.out"
