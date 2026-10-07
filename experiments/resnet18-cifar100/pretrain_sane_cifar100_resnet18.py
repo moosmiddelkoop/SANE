@@ -11,29 +11,13 @@ os.environ["MKL_NUM_THREADS"] = "6"  # export MKL_NUM_THREADS=6
 os.environ["VECLIB_MAXIMUM_THREADS"] = "4"  # export VECLIB_MAXIMUM_THREADS=4
 os.environ["NUMEXPR_NUM_THREADS"] = "6"  # export NUMEXPR_NUM_THREADS=6
 
-import torch
-
-import ray
-from ray import tune
-
-from ray.air.integrations.wandb import WandbLoggerCallback
-from SANE.evaluation.ray_fine_tuning_callback import CheckpointSamplingCallback
-from SANE.evaluation.ray_fine_tuning_callback_subsampled import (
-    CheckpointSamplingCallbackSubsampled,
-)
-from SANE.evaluation.ray_fine_tuning_callback_bootstrapped import (
-    CheckpointSamplingCallbackBootstrapped,
-)
-
-import json
-
 from pathlib import Path
 
+import ray
+import torch
 
 from SANE.models.def_AE_trainable import AE_trainable
-from SANE.datasets.dataset_sampling_preprocessed import PreprocessedSamplingDataset
 from SANE.utils import seed_everything
-
 
 PATH_ROOT = Path("./")
 
@@ -79,7 +63,7 @@ def main():
     config["ae:i_dim"] = 288
     config["ae:lat_dim"] = 128
     config["ae:max_positions"] = [55000, 100, 550]
-    config["training::windowsize"] = 256
+    config["training::windowsize"] = 1024
     config["ae:d_model"] = 2048
     config["ae:nhead"] = 16
     config["ae:num_layers"] = 8
