@@ -80,7 +80,7 @@ def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_
     # dataset.pt size ~ 1000 models x supersample x 14.8 MB (10 -> ~150 GB)
     supersample = 10
     precision = "32"
-    ignore_bn = False
+    ignore_bn = True
     tokensize = 288
 
     # permutation spec
