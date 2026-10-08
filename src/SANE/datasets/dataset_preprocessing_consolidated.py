@@ -91,14 +91,15 @@ def prepare_multiple_datasets(configurations: List[Dict[str, Any]]):
         torch.save(datasets, target_path.joinpath("dataset.pt"))
 
 
-def stack_dataset(dataset, num_workers=0):
+def stack_dataset(dataset, num_workers=0, token_dtype=torch.float32):
     """Stacks all samples into a single in-RAM TensorSamplingDataset. The
     DataLoader's num_workers parallelize the per-sample work in __getitem__
-    (git-re-basin permutation + tokenization), which is the bottleneck here."""
+    (git-re-basin permutation + tokenization), which is the bottleneck here.
+    The tokens are cast to token_dtype on the copy into the preallocated tensor."""
     n = len(dataset)
     w0, m0, p0, props0 = dataset[0]
     # preallocate and fill in place: no 2x peak memory from torch.stack
-    w = torch.empty((n, *w0.shape), dtype=w0.dtype)
+    w = torch.empty((n, *w0.shape), dtype=token_dtype)
     m = torch.empty((n, *m0.shape), dtype=m0.dtype)
     p = torch.empty((n, *p0.shape), dtype=p0.dtype)
     props = torch.empty((n, *props0.shape), dtype=props0.dtype)
@@ -284,7 +285,7 @@ def preprocess_single_split(
         train_val_test=split,  # determines which dataset split to use
         max_samples=max_samples,
         weight_threshold=weight_threshold,
-        precision=precision,
+        precision="32",  # checkpoint mode holds state dicts, which set_precision cannot cast; stack_dataset casts instead
         filter_function=filter_fn,  # gets sample path as argument and returns True if model needs to be filtered out
         property_keys=property_keys,
         num_threads=num_threads,  # these were hardcoded before (to 12)
@@ -342,7 +343,8 @@ def preprocess_single_split(
     # copy-on-write duplicates the full python object graph of dataset.data
     # (refcount writes dirty every page), so memory scales with
     # num_workers x dataset size
-    split_dataset = stack_dataset(dataset, num_workers=min(num_threads, 8))
+    token_dtype = {"16": torch.float16, "32": torch.float32}[str(precision)]
+    split_dataset = stack_dataset(dataset, num_workers=min(num_threads, 8), token_dtype=token_dtype)
     # carry the split along, so pretraining can verify train/val/test
     split_dataset.split_id = dataset.split_id
     split_dataset.models = [str(path) for path in dataset.path_list]
