@@ -57,7 +57,7 @@ logging.basicConfig(level=logging.INFO)
 
 def prep_data():
     dataset_target_path = [
-        Path("/projects/prjs2156/shared/wsl/cifar100_resnet18/dataset_cifar100_token_288_ep60_std/"),
+        Path("/projects/prjs2156/shared/wsl/cifar100_resnet18/dataset_cifar100_token_576_ep60_std/"),
     ]
     zoo_path = [Path("/projects/prjs2156/shared/wsl/cifar100_resnet18/cifar100_resnet18_kaiming_uniform_ep60_no_opt/")]
     zoo_path_and_permutation_spec_and_target_path = [
@@ -76,12 +76,12 @@ def create_configurations(zoo_path_and_permutation_spec_and_target_path, filter_
     weight_threshold = float("inf")
     num_threads = int(os.environ["SLURM_CPUS_PER_TASK"])  # CPUs requested for this SLURM job (also correct under --exclusive)
     windowsize = 1024
-    # stored windows per model: 39304 tokens (ignore_bn) // 1024 = 38, about one pass over each model.
-    # ("auto" does not work in checkpoint mode.) dataset.pt ~ 1000 models x 38 x 3.8 MB ~ 146 GB
-    supersample = 38
+    # stored windows per model: 20132 tokens (ignore_bn) // 1024 = 19, about one pass over each model.
+    # ("auto" does not work in checkpoint mode.) dataset.pt ~ 1000 models x 19 x 7.7 MB ~ 146 GB
+    supersample = 19
     precision = "16"  # tokens cast to fp16 at stacking; halves dataset.pt
     ignore_bn = True
-    tokensize = 288
+    tokensize = 576
 
     # permutation spec
     # each stored sample holds permutation_number + 1 copies of its window (200 -> ~470 MB per sample)
