@@ -380,6 +380,10 @@ class DownstreamTaskLearner:
 
         # baseline regularization very small
         reg_list = [
+            1e5,
+            3e4,
+            1e4,
+            3e3,
             1e3,
             3e2,
             1e2,
@@ -496,6 +500,7 @@ class DownstreamTaskLearner:
             ## attempt to compute inverse solution
             while True:
                 thiko_train = regularization * torch.eye(X_t_X_train.shape[0])
+                thiko_train[-1, -1] = 0  # do not penalize the intercept
                 try:
                     X_t_X_inv_train = torch.inverse(X_t_X_train + thiko_train)
                 except:
@@ -517,6 +522,7 @@ class DownstreamTaskLearner:
             X_t_y_train = torch.einsum("ij,j->i", X_t_train, y_train)
             # add regularization
             thiko_train = regularization * torch.eye(X_t_X_train.shape[0])
+            thiko_train[-1, -1] = 0  # do not penalize the intercept
             X_t_X_train += thiko_train.to(self.device)
             # solve system
             b = torch.linalg.solve(X_t_X_train, X_t_y_train)
@@ -621,7 +627,9 @@ class DownstreamTaskLearner:
 
         # A = X^T X + lambda I  ([D+1, D+1]);  RHS = X^T Y  ([D+1, K])
         X_t_X_train = torch.einsum("ni,nj->ij", X_train, X_train)
-        A = X_t_X_train + regularization * torch.eye(X_t_X_train.shape[0]).to(self.device)
+        penalty = regularization * torch.eye(X_t_X_train.shape[0]).to(self.device)
+        penalty[-1, -1] = 0  # do not penalize the intercept
+        A = X_t_X_train + penalty
         X_t_Y_train = torch.einsum("ni,nk->ik", X_train, Y_train)
         # single factorization, K right-hand sides
         B = torch.linalg.solve(A, X_t_Y_train)
@@ -680,6 +688,10 @@ class DownstreamTaskLearner:
 
         # same regularization sweep as the scalar closed-form solver
         reg_list = [
+            1e5,
+            3e4,
+            1e4,
+            3e3,
             1e3,
             3e2,
             1e2,
