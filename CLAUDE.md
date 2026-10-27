@@ -66,6 +66,16 @@ Only report to me in ASD-STE100 Simplified Technical English.
 - After a feature change, add a short manual test checklist.
 - The checklist must state what to open, click, enter, and confirm.
 
+## Git and PRs
+
+Other sessions merge PRs from their own worktrees, so the local `main` is often out of date.
+
+- Run `git fetch origin` before you create a branch, a commit or a PR.
+- Run it also before you say that work is uncommitted or not on `main`.
+- Compare with `origin/main`, never with the local `main`.
+- Base new branches on `origin/main`.
+- Check `gh pr list --state all` for PRs that already contain the work.
+
 ## Project
 
 SANE (Sequential Autoencoder for Neural Embeddings) — research code for the ICML 2024 paper "Towards Scalable and Versatile Weight Space Learning". The package learns task-agnostic representations of neural network *weights* by tokenizing model weights and training a transformer autoencoder over those token sequences. Downstream uses: predicting model properties (test_acc, ggap, epoch) and generating/finetuning new models from sampled embeddings.
