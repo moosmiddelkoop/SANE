@@ -847,10 +847,14 @@ class DownstreamTaskLearner:
         mlp_batch_size: int = 64,
         sentinel: float = -999.0,
         log_fn=None,
+        valset=None,
     ):
         """
         bareback MLP regression head (e.g. per-class recall). Returns final train
         loss, and MSE / MAE / mean-R^2 on train and test.
+
+        If valset is given (same forms as trainset), the MLP of the epoch with the lowest
+        val loss is kept and returned (early stopping), and best_epoch is added.
 
         If log_fn is given, it is called each step with {"loss_step": ..., "epoch": ...,
         "step": ...} and each epoch with {"loss_epoch": ..., "epoch": ...}. The caller
@@ -877,6 +881,9 @@ class DownstreamTaskLearner:
 
         embeddings_train, targets_train = _prep(trainset)
         embeddings_test, targets_test = _prep(testset)
+        if valset is not None:
+            embeddings_val, targets_val = _prep(valset)
+            best_val_loss, best_epoch = float("inf"), None
 
         mlp = nn.Sequential(
             nn.Linear(embeddings_train.shape[1], 128),
@@ -917,12 +924,19 @@ class DownstreamTaskLearner:
             with torch.no_grad():
                 pred_test = mlp(embeddings_test)
                 test_loss = loss_fn(pred_test, targets_test).item()
+                if valset is not None:
+                    val_loss = loss_fn(mlp(embeddings_val), targets_val).item()
+                    if val_loss < best_val_loss:
+                        best_val_loss, best_epoch = val_loss, epoch
+                        best_state = {k: v.clone() for k, v in mlp.state_dict().items()}
             if log_fn is not None:
                 log_fn({"test_loss_epoch": test_loss, "epoch": epoch})
             mlp.train()
             if log_fn is not None:
                 log_fn({"loss_epoch": last_loss, "epoch": epoch})
 
+        if valset is not None:
+            mlp.load_state_dict(best_state)
         mlp.eval()
         with torch.no_grad():
             pred_train, pred_test = mlp(embeddings_train), mlp(embeddings_test)
@@ -933,7 +947,7 @@ class DownstreamTaskLearner:
             r2_train = self.compute_r2_multivariate(pred_train, targets_train).mean().item()
             r2_test = self.compute_r2_multivariate(pred_test, targets_test).mean().item()
 
-        return {
+        result = {
             "final_train_loss": last_loss,
             "mse_train": mse_train,
             "mse_test": mse_test,
@@ -944,6 +958,9 @@ class DownstreamTaskLearner:
             "target_keys": list(target_keys),
             "mlp": mlp,
         }
+        if valset is not None:
+            result["best_epoch"] = best_epoch
+        return result
 
     def eval_ood_dstask(
         self,
