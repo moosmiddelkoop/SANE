@@ -53,8 +53,8 @@ Only report to me in ASD-STE100 Simplified Technical English.
   "Tell me what you think."
   "I can help with that."
 - State assumptions before you act.
-- Ask a question only when a requirement is genuinely ambiguous.
-- Otherwise, select the sensible default and state the selected default.
+- Discuss every unclear or unmentioned choice with me before you execute.
+- Give each choice its trade-off and your recommendation, then wait for my answer.
 - If a second issue appears, finish the first issue.
 - Offer the second issue as a separate task.
 - Do not combine the second issue with the current task.
