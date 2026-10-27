@@ -81,6 +81,7 @@ def prepare_multiple_datasets(configurations: List[Dict[str, Any]]):
             permutations_per_sample_test=config.get("permutations_per_sample_test", 0),
             page_size=config.get("page_size", 4 * 1 << 21),
             drop_pt_dataset=config.get("drop_pt_dataset", False),
+            n_chunks=config.get("n_chunks", 1),
         )
         collected.setdefault(Path(config["dataset_target_path"]), {}).update(
             {f"{split}set": ds for split, ds in datasets.items()}
@@ -144,6 +145,7 @@ def prepare_dataset(
     permutations_per_sample_test: int = 0,
     page_size: int = 4 * 1 << 21,
     drop_pt_dataset: bool = False,
+    n_chunks: int = 1,
 ):
     """
     Prepares an ffcv dataset from token_dataset.
@@ -168,6 +170,7 @@ def prepare_dataset(
         permutations_per_sample_test: Number of permutations per sample to use for testing.
         page_size: ffcv Page size, see below.
         drop_pt_dataset: flag wheater to write out the dataset.pt torch.utils.data.Dataset type dataset as pickle as well.
+        n_chunks: number of parts each split is built in, see preprocess_single_split.
     Returns:
         dict mapping each split to its stacked TensorSamplingDataset.
     """
@@ -204,6 +207,7 @@ def prepare_dataset(
             tokensize=tokensize,
             page_size=page_size,
             drop_pt_dataset=drop_pt_dataset,
+            n_chunks=n_chunks,
         )
     return datasets
 
@@ -237,6 +241,7 @@ def preprocess_single_split(
     tokensize: int = 576,
     page_size: int = 4 * 1 << 21,
     drop_pt_dataset: bool = False,
+    n_chunks: int = 1,
 ):
     """
     Loads a single split of the token dataset and writes to ffcv.
@@ -261,6 +266,8 @@ def preprocess_single_split(
         tokensize: set dimension of tokens. set to 0 to discover size.
         page_size: ffcv paramter size of page to use for mmap used in dataset writer
         drop_pt_dataset: weather or not to aditionally write the torch.utils.Dataset type as .pt file as well.
+        n_chunks: build the split in this many parts of its models, so only one part's raw checkpoints
+            is in RAM at a time. Each part standardizes with its own per-layer mean / std.
 
     Returns:
         the split stacked into a TensorSamplingDataset.
@@ -275,79 +282,98 @@ def preprocess_single_split(
     else:
         root = Path(zoo_path).absolute()
 
-    logging.info("Load token dataset")
-    dataset = DatasetTokens(
-        root=root,
-        epoch_lst=epoch_list,
-        permutation_spec=permutation_spec,
-        map_to_canonical=map_to_canonical,
-        standardize=standardize,
-        train_val_test=split,  # determines which dataset split to use
-        max_samples=max_samples,
-        weight_threshold=weight_threshold,
-        precision="32",  # checkpoint mode holds state dicts, which set_precision cannot cast; stack_dataset casts instead
-        filter_function=filter_fn,  # gets sample path as argument and returns True if model needs to be filtered out
-        property_keys=property_keys,
-        num_threads=num_threads,  # these were hardcoded before (to 12)
-        verbosity=3,
-        mode="checkpoint",  # apply permutation on checkpoint
-        getitem="tokens+props",
-        ignore_bn=ignore_bn,
-        tokensize=tokensize,
-    )
-
     # check existance of dataset parth
     Path(dataset_target_path).mkdir(parents=True, exist_ok=True)
 
-    # drop pt file
-    if drop_pt_dataset:
-        write_path = Path(dataset_target_path).joinpath(f"dataset_{split}.pt")
-        try:
-            torch.save(dataset, write_path)
-        except Exception as e:
-            logging.error(f"could not save dataset.pt at {write_path}")
-            logging.error(e)
-
-    # set windowcutter transform
-    logging.info("set augmentations before ffcv dataset")
-    dataset.transforms = CheckpointAugmentationPipeline(
-        perm_spec=permutation_spec,
-        tokensize=dataset.tokensize,
-        ignore_bn=ignore_bn,
-        permutation_number=permutation_number,
-        windowsize=windowsize,
-    )
-
-    # set supersample
-    if supersample == "auto":
-        # infer number of iterations over each sample as len of token sequence divided by windowsize
-        supersample = dataset.data[0][0].shape[0] // windowsize
-    logging.info(f"set to supersample: {supersample}")
-
-    # set supersample in the dataset
-    dataset.supersample = supersample
-
-    logging.info(f"dataset len: {len(dataset)}")
-
-    # get sample and infer dimensions
-    logging.info("get sample and infer dimensions")
-    ddx, mask, pos, props = dataset.__getitem__(0)
-
-    logging.info(f"ddx.shape: {ddx.shape} - dtype: {ddx.dtype}")
-    logging.info(f"mask.shape: {mask.shape} - dtype: {mask.dtype}")
-    logging.info(f"pos.shape: {pos.shape} - dtype: {pos.dtype}")
-    logging.info(f"props.shape: {props.shape} - dtype: {props.dtype}")
-
-    logging.info("stack samples into tensors")
-    # cap stacking workers: each DataLoader worker forks the parent and
-    # copy-on-write duplicates the full python object graph of dataset.data
-    # (refcount writes dirty every page), so memory scales with
-    # num_workers x dataset size
     token_dtype = {"16": torch.float16, "32": torch.float32}[str(precision)]
-    split_dataset = stack_dataset(dataset, num_workers=min(num_threads, 8), token_dtype=token_dtype)
+    stacked_chunks = []
+    models = []
+    num_samples = 0
+    layer_norms_per_chunk = []
+    for chunk_index in range(n_chunks):
+        dataset = None  # free the previous chunk's checkpoints before the next one is loaded
+        logging.info(f"Load token dataset, chunk {chunk_index + 1} of {n_chunks}")
+        dataset = DatasetTokens(
+            root=root,
+            epoch_lst=epoch_list,
+            permutation_spec=permutation_spec,
+            map_to_canonical=map_to_canonical,
+            standardize=standardize,
+            train_val_test=split,  # determines which dataset split to use
+            max_samples=max_samples,
+            model_chunk=(chunk_index, n_chunks),
+            weight_threshold=weight_threshold,
+            precision="32",  # checkpoint mode holds state dicts, which set_precision cannot cast; stack_dataset casts instead
+            filter_function=filter_fn,  # gets sample path as argument and returns True if model needs to be filtered out
+            property_keys=property_keys,
+            num_threads=num_threads,  # these were hardcoded before (to 12)
+            verbosity=3,
+            mode="checkpoint",  # apply permutation on checkpoint
+            getitem="tokens+props",
+            ignore_bn=ignore_bn,
+            tokensize=tokensize,
+        )
+
+        # drop pt file
+        if drop_pt_dataset:
+            write_path = Path(dataset_target_path).joinpath(f"dataset_{split}.pt")
+            try:
+                torch.save(dataset, write_path)
+            except Exception as e:
+                logging.error(f"could not save dataset.pt at {write_path}")
+                logging.error(e)
+
+        # set windowcutter transform
+        logging.info("set augmentations before ffcv dataset")
+        dataset.transforms = CheckpointAugmentationPipeline(
+            perm_spec=permutation_spec,
+            tokensize=dataset.tokensize,
+            ignore_bn=ignore_bn,
+            permutation_number=permutation_number,
+            windowsize=windowsize,
+        )
+
+        # set supersample
+        if supersample == "auto":
+            # infer number of iterations over each sample as len of token sequence divided by windowsize
+            supersample = dataset.data[0][0].shape[0] // windowsize
+        logging.info(f"set to supersample: {supersample}")
+
+        # set supersample in the dataset
+        dataset.supersample = supersample
+
+        logging.info(f"dataset len: {len(dataset)}")
+
+        # get sample and infer dimensions
+        logging.info("get sample and infer dimensions")
+        ddx, mask, pos, props = dataset.__getitem__(0)
+
+        logging.info(f"ddx.shape: {ddx.shape} - dtype: {ddx.dtype}")
+        logging.info(f"mask.shape: {mask.shape} - dtype: {mask.dtype}")
+        logging.info(f"pos.shape: {pos.shape} - dtype: {pos.dtype}")
+        logging.info(f"props.shape: {props.shape} - dtype: {props.dtype}")
+
+        logging.info("stack samples into tensors")
+        # cap stacking workers: each DataLoader worker forks the parent and
+        # copy-on-write duplicates the full python object graph of dataset.data
+        # (refcount writes dirty every page), so memory scales with
+        # num_workers x dataset size
+        stacked_chunks.append(stack_dataset(dataset, num_workers=min(num_threads, 8), token_dtype=token_dtype))
+        models.extend(str(path) for path in dataset.path_list)
+        num_samples += dataset._len
+        layer_norms_per_chunk.append(getattr(dataset, "layers", {}))
+
+    if n_chunks == 1:
+        split_dataset = stacked_chunks[0]
+    else:
+        logging.info(f"concatenate {n_chunks} chunks")
+        split_dataset = TensorSamplingDataset(
+            *(torch.cat([getattr(chunk, name) for chunk in stacked_chunks]) for name in ("w", "m", "p", "props"))
+        )
+    del stacked_chunks
     # carry the split along, so pretraining can verify train/val/test
     split_dataset.split_id = dataset.split_id
-    split_dataset.models = [str(path) for path in dataset.path_list]
+    split_dataset.models = models
 
     # get metadata and write to disk
     # get full sample and infer dimensions
@@ -364,7 +390,8 @@ def preprocess_single_split(
     logging.info("collect info and write to disk")
     info = {
         "zoo_path": str(zoo_path),
-        "num_samples": dataset._len,
+        "num_samples": num_samples,
+        "n_chunks": n_chunks,
         "supersample": supersample,
         "properties": dataset.property_keys["result_keys"],
         "epoch_list": epoch_list,
@@ -379,7 +406,7 @@ def preprocess_single_split(
         "num_threads": num_threads,
         "windowsize": windowsize,
         "split": split,
-        "models": [str(path) for path in dataset.path_list],
+        "models": models,
         "max_positions": pos.max(dim=0).values.tolist(),
     }
     # add info json to the same path
@@ -387,12 +414,7 @@ def preprocess_single_split(
     json.dump(info, json_path.open("w"))
 
     # dump normalization data
-    try:
-        layer_norms = dataset.layers
-    except Exception as e:
-        print(e)
-        print("no norm found")
-        layer_norms = {}
+    layer_norms = layer_norms_per_chunk[0] if n_chunks == 1 else {"chunks": layer_norms_per_chunk}
     if standardize == True:
         norm_mode = "standardize"
     elif standardize == "minmax":

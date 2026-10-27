@@ -33,6 +33,7 @@ class ModelDatasetBaseEpochs(Dataset):
         mode="checkpoint",
         train_val_test="train",  # "train", "val" or "test" from the zoo's split.json; "all" for populations
         max_samples=None,
+        model_chunk=None,  # (index, n_chunks): keep every n_chunks-th model of the split, starting at index
         weight_threshold=float("inf"),
         filter_function=None,  # gets sample path as argument and returns True if model needs to be filtered out
         property_keys=None,
@@ -64,6 +65,9 @@ class ModelDatasetBaseEpochs(Dataset):
         self.path_list, reference_candidates, self.split_id = select_models(
             self.root, train_val_test, max_samples=max_samples
         )
+        if model_chunk is not None:
+            chunk_index, n_chunks = model_chunk
+            self.path_list = self.path_list[chunk_index::n_chunks]
         logging.info(f"{train_val_test} split {self.split_id}: {len(self.path_list)} models")
 
         ### get reference model ###########################################################################
