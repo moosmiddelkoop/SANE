@@ -4,7 +4,7 @@
 #SBATCH --gpus=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
-#SBATCH --time=02:00:00
+#SBATCH --time=04:00:00
 #SBATCH --output=/gpfs/home1/mmiddelkoop/SANE/experiments/resnet18-cifar100/logs/eval_recall_cifar100_resnet18_%j.out
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=moos@cwi.nl
