@@ -1,28 +1,23 @@
+import json
+import logging
+import os
+from pathlib import Path
+
+import torch
+
+from SANE.datasets.dataset_tokens import DatasetTokens
+from SANE.datasets.zoo_split import assert_same_split
 from SANE.models.def_downstream_module import (
     DownstreamTaskLearner as DownstreamTaskLearner,
 )
-
-from SANE.models.downstream_baselines import IdentityModel, LayerQuintiles
-from SANE.datasets.dataset_tokens import DatasetTokens
-from SANE.datasets.zoo_split import assert_same_split
-
-from pathlib import Path
-
-import json
-import os
-import torch
-
-import logging
+from SANE.models.downstream_baselines import LayerQuintiles
 
 logging.basicConfig(level=logging.INFO)
 from SANE.git_re_basin.git_re_basin import (
-    resnet18_permutation_spec,
     zoo_cnn_large_permutation_spec,
-    zoo_cnn_permutation_spec,
 )
 from SANE.models.def_AE_module import AEModule
 from SANE.utils import seed_everything
-
 
 # %%
 logging.info("Loading config")
@@ -42,9 +37,7 @@ config["training::steps_per_epoch"] = 123
 module = AEModule(config)
 
 # load checkpoint - adjust the epoch to the one you want to evaluate
-checkpoint = torch.load(
-    model_path.joinpath("checkpoint_000100/state.pt"), map_location=device
-)
+checkpoint = torch.load(model_path.joinpath("checkpoint_000100/state.pt"), map_location=device)
 module.model.load_state_dict(checkpoint["model"])
 
 # %%
@@ -55,9 +48,7 @@ def load_dataset_from_config(config, epoch_list, permutation_spec, map_to_canoni
     # load dataset config
     config_ds = json.load(
         open(
-            str(config["dataset::dump"]).replace(
-                "dataset_beton", "dataset_info_train.json"
-            ),
+            str(config["dataset::dump"]).replace("dataset_beton", "dataset_info_train.json"),
             "r",
         )
     )
@@ -89,14 +80,10 @@ def load_dataset_from_config(config, epoch_list, permutation_spec, map_to_canoni
     return trainset, valset, testset
 
 
-def load_single_dataset(
-    config_ds, epoch_list, split, permutation_spec, map_to_canonical
-):
+def load_single_dataset(config_ds, epoch_list, split, permutation_spec, map_to_canonical):
     # get missing values
     # root = config_ds['zoo_path']
-    root = Path(
-        ds_info["zoo_path"].replace("[PosixPath(", "").replace(")]", "")[1:-1]
-    )  # weird hack but hey
+    root = Path(ds_info["zoo_path"].replace("[PosixPath(", "").replace(")]", "")[1:-1])  # weird hack but hey
     standardize = config_ds["standardize"]
     max_samples = config_ds["max_samples"]
     weight_threshold = config_ds["weight_threshold"]
@@ -151,9 +138,7 @@ def update_json_with_results(json_filename, new_results):
 logging.info("load dataset")
 ds_info = json.load(
     open(
-        str(config["dataset::dump"]).replace(
-            "dataset_beton", "dataset_info_train.json"
-        ),
+        str(config["dataset::dump"]).replace("dataset_beton", "dataset_info_train.json"),
         "r",
     )
 )
@@ -174,7 +159,7 @@ ds_train = torch.load(ds_path.joinpath("dataset_train.pt"))
 ds_test = torch.load(ds_path.joinpath("dataset_test.pt"))
 ds_val = torch.load(ds_path.joinpath("dataset_val.pt"))
 
-%%
+# %%
 ## Baseline 1: lq
 logging.info("compute LQ baseline")
 dstk = DownstreamTaskLearner()
@@ -193,7 +178,7 @@ performance_lq["method"] = "lq"
 update_json_with_results(results_json_path, performance_lq)
 
 
-%%
+# %%
 # AE
 logging.info("compute AE performance")
 
