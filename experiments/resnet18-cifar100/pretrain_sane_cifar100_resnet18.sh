@@ -9,14 +9,15 @@
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=moos@cwi.nl
 
-# usage: sbatch pretrain_sane_cifar100_resnet18.sh <tokensize: 288 or 576> [epochs, default 50]
-# The 1-GPU share of an H100 node has 180 GiB RAM; dataset.pt (~146 GB) is loaded into it once.
+# usage: sbatch pretrain_sane_cifar100_resnet18.sh <tokensize: 288 or 576> [epochs, default 50] [checkpoints: ep60 (default) or ep0-60]
+# The 1-GPU share of an H100 node has 180 GiB RAM; dataset.pt (~146 GB ep60, ~150 GB ep0-60) is loaded into it once.
 # Expected runtime: ~11 h for 288 x 50 epochs and for 576 x 100 epochs (same number of steps).
 
 set -euo pipefail
 
 TOKENSIZE=$1
 EPOCHS=${2:-50}
+CHECKPOINTS=${3:-ep60}
 
 cd "$HOME/SANE/experiments/resnet18-cifar100"
 mkdir -p logs
@@ -27,5 +28,5 @@ source "$HOME/SANE/.venv/bin/activate"
 export RAY_TMPDIR=/dev/shm/ray_$SLURM_JOB_ID
 trap 'rm -rf "$RAY_TMPDIR"' EXIT
 
-echo "tokensize: $TOKENSIZE, epochs: $EPOCHS"
-python pretrain_sane_cifar100_resnet18.py --tokensize="$TOKENSIZE" --epochs="$EPOCHS"
+echo "tokensize: $TOKENSIZE, epochs: $EPOCHS, checkpoints: $CHECKPOINTS"
+python pretrain_sane_cifar100_resnet18.py --tokensize="$TOKENSIZE" --epochs="$EPOCHS" --checkpoints="$CHECKPOINTS"

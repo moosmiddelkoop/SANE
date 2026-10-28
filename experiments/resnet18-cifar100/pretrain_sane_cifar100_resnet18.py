@@ -22,25 +22,29 @@ from ray.air.integrations.wandb import WandbLoggerCallback
 from SANE.models.def_AE_trainable import AE_trainable
 from SANE.utils import seed_everything
 
-# one run per tokensize (288 or 576); each has its own preprocessed dataset
+# one run per tokensize (288 or 576) and checkpoint set; each has its own preprocessed dataset
 parser = ArgumentParser()
 parser.add_argument("--tokensize", type=int, required=True)
 parser.add_argument("--epochs", type=int, default=50)
+# zoo checkpoints in the dataset: ep60 (epoch 60 only) or ep0-60 (every 5th epoch, 0 to 60)
+parser.add_argument("--checkpoints", choices=["ep60", "ep0-60"], default="ep60")
 TOKENSIZE = parser.parse_args().tokensize
 EPOCHS = parser.parse_args().epochs
+CHECKPOINTS = parser.parse_args().checkpoints
 
 OUTPUT_PATH = Path("/projects/prjs2156/shared/wsl/metanets/sane_pretraining")
 WANDB_PROJECT = "sane-pretraining-resnet18"
 # directory within OUTPUT_PATH where the results will be stored
 EXPERIMENT_NAME = "cifar100_resnet18"
 # Names the trial dir within EXPERIMENT_NAME and the W&B run
-# (the trial_id suffix keeps names unique across launches)
-RUN_TAG = f"cifar100-resnet18-tk{TOKENSIZE}-v1.0"
+# (the trial_id suffix keeps names unique across launches).
+# Runs before --checkpoints existed are ep60 and have no checkpoints part in their name.
+RUN_TAG = f"cifar100-resnet18-tk{TOKENSIZE}-{CHECKPOINTS}-v1.0"
 
 DATA_PATH = Path(
     os.environ.get(
         "SANE_DATA_DIR",
-        f"/projects/prjs2156/shared/wsl/cifar100_resnet18/dataset_cifar100_token_{TOKENSIZE}_ep60_std/",
+        f"/projects/prjs2156/shared/wsl/cifar100_resnet18/dataset_cifar100_token_{TOKENSIZE}_{CHECKPOINTS}_std/",
     )
 )
 
