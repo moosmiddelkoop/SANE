@@ -53,8 +53,8 @@ Only report to me in ASD-STE100 Simplified Technical English.
   "Tell me what you think."
   "I can help with that."
 - State assumptions before you act.
-- Ask a question only when a requirement is genuinely ambiguous.
-- Otherwise, select the sensible default and state the selected default.
+- Discuss every unclear or unmentioned choice with me before you execute.
+- Give each choice its trade-off and your recommendation, then wait for my answer.
 - If a second issue appears, finish the first issue.
 - Offer the second issue as a separate task.
 - Do not combine the second issue with the current task.
@@ -65,6 +65,16 @@ Only report to me in ASD-STE100 Simplified Technical English.
 - Include exact file paths when files change.
 - After a feature change, add a short manual test checklist.
 - The checklist must state what to open, click, enter, and confirm.
+
+## Git and PRs
+
+Other sessions merge PRs from their own worktrees, so the local `main` is often out of date.
+
+- Run `git fetch origin` before you create a branch, a commit or a PR.
+- Run it also before you say that work is uncommitted or not on `main`.
+- Compare with `origin/main`, never with the local `main`.
+- Base new branches on `origin/main`.
+- Check `gh pr list --state all` for PRs that already contain the work.
 
 ## Project
 
