@@ -10,7 +10,7 @@
 #SBATCH --mail-user=moos@cwi.nl
 
 # usage: sbatch train_recall_transformer_fmnist.sh [init: scratch (default) or sane] [seed: 0]
-# needs cache/tokens_fmnist_ep4-8.pt from build_tokens_fmnist.sh
+# needs unthi_fmnist_preprocessed/tokens_ep4-8.pt from: sbatch build_tokens.sh fmnist
 
 set -euo pipefail
 

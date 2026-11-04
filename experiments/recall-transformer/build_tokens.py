@@ -1,4 +1,4 @@
-"""Token cache for the end-to-end recall transformer, Fashion-MNIST unthi zoo.
+"""Token cache for the end-to-end recall transformer, one unthi zoo (mnist, fmnist, cifar10 or svhn).
 
 Loads every model of the zoo with DatasetTokens, with the settings of the SANE preprocessing
 (data/preprocess_dataset_smallcnnzoo.py): canonical form, per-layer standardization, no
@@ -7,10 +7,13 @@ batch norm, tokensize 145, weight threshold 100. The standardization statistics 
 per-class recall is valid at 0, 4 and 8, and 0 is the random init. A checkpoint that the
 weight threshold drops is not in the cache.
 
-Writes cache/tokens_fmnist_ep4-8.pt:
-  tokens [N, n_tokens, 145], positions [n_tokens, 3], Y [N, 10] per-class recall,
-  epoch [N], model_dir [N], split [N] ("train"/"val"/"test"), split_id
-Needs <zoo>/split.json. Run: sbatch build_tokens_fmnist.sh (CPU, about 1-2 h).
+Zoo: Fashion-MNIST is read from /projects (extracted by silic); the other zoos from their
+scratch copy, which build_tokens.sh unzips. Each zoo needs <zoo>/split.json.
+Writes to /projects/prjs2156/shared/wsl/unthi_zoo/unthi_<zoo>_preprocessed/:
+  tokens_ep4-8.pt: tokens [N, n_tokens, 145], positions [n_tokens, 3], Y [N, 10] per-class
+    recall, epoch [N], model_dir [N], split [N] ("train"/"val"/"test"), split_id
+  zoo_split.json: a copy of <zoo>/split.json, as scratch deletes files after two weeks
+Run: sbatch build_tokens.sh <zoo> (CPU, about 1 h, plus about 1 h to unzip).
 """
 
 import os
@@ -21,6 +24,8 @@ os.environ["MKL_NUM_THREADS"] = "2"
 
 import gc
 import logging
+import shutil
+from argparse import ArgumentParser
 from pathlib import Path
 
 import torch
@@ -31,8 +36,14 @@ from SANE.utils import seed_everything
 
 logging.basicConfig(level=logging.INFO)
 
-ZOO_ROOT = Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_fmnist")
-CACHE_PT = Path("cache/tokens_fmnist_ep4-8.pt")
+parser = ArgumentParser()
+parser.add_argument("--zoo", choices=["mnist", "fmnist", "cifar10", "svhn"], required=True)
+ZOO = parser.parse_args().zoo
+
+PROJECT_DIR = Path("/projects/prjs2156/shared/wsl/unthi_zoo")
+ZOO_ROOT = PROJECT_DIR / "unthi_fmnist" if ZOO == "fmnist" else Path(f"/scratch-shared/mmiddelkoop/unthi_zoo/unthi_{ZOO}")
+OUT_DIR = PROJECT_DIR / f"unthi_{ZOO}_preprocessed"
+CACHE_PT = OUT_DIR / "tokens_ep4-8.pt"
 LOADED_EPOCHS = list(range(9))  # standardization statistics as in SANE pretraining
 KEPT_EPOCHS = [4, 8]
 ACC_CLASS_KEYS = [f"acc_class_{i}" for i in range(10)]
@@ -74,7 +85,6 @@ for split in ["train", "val", "test"]:
 
 Y = torch.tensor(Y)
 assert (Y != SENTINEL).all(), "per-class recall is missing at a kept checkpoint"
-CACHE_PT.parent.mkdir(exist_ok=True)
 torch.save(
     {
         "tokens": torch.stack(tokens),
@@ -87,4 +97,5 @@ torch.save(
     },
     CACHE_PT,
 )
+shutil.copy(ZOO_ROOT / "split.json", OUT_DIR / "zoo_split.json")
 logging.info(f"Saved {len(Y)} samples to {CACHE_PT}")

@@ -10,7 +10,7 @@ predicts its 10 per-class recalls. It is trained end to end with MSE.
   head are new. That encoder was pretrained on an older random split without a split_id,
   so it has seen the weights (not the recall) of some models of this test split.
 
-Data: cache/tokens_fmnist_ep4-8.pt from build_tokens_fmnist.py. Checkpoints 4 and 8 are one
+Data: unthi_fmnist_preprocessed/tokens_ep4-8.pt from build_tokens.py. Checkpoints 4 and 8 are one
 training set. Targets are standardized with the train mean and std of each class.
 Training: AdamW, cosine learning rate per step, bf16 autocast on GPU. The epoch with the
 lowest val loss is kept. Metrics per checkpoint (4, 8) on train and test in recall units, as
@@ -44,7 +44,7 @@ parser.add_argument("--seed", type=int, default=0)
 args = parser.parse_args()
 
 ZOO_ROOT = Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_fmnist")
-CACHE_PT = Path("cache/tokens_fmnist_ep4-8.pt")
+CACHE_PT = Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_fmnist_preprocessed/tokens_ep4-8.pt")
 SANE_RUN = Path("/projects/prjs2156/shared/wsl/metanets/sane_pretraining/fmnist/fmnist-v1.0_d3e0b_00000_2026-07-15_10-54-45")
 SANE_CHECKPOINT = SANE_RUN / "checkpoint_000050" / "state.pt"
 OUT_DIR = Path("results")
