@@ -41,7 +41,6 @@ Only report to me in ASD-STE100 Simplified Technical English.
 - Use this format:
   "Step 3 of 5 done: schema updated. Next: backfill."
 - Do not assume that the user remembers the previous message.
-- Give a concrete time estimate when the task requires user work.
 - Do not use vague estimates such as:
   "This will take some work."
 - Keep normal answers to six sentences or fewer unless the user asks for depth.
