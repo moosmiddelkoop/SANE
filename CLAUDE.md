@@ -85,6 +85,9 @@ Tests use pytest (configured in `setup.cfg` with `--cov SANE`); however `tests/`
 
 There is no lint command configured; `setup.cfg` declares `flake8` settings (line length 88, black-compatible) but no pre-commit hook.
 
+## Project organization
+Keep code and results that are central to the research, and code and results that are used for understanding the research during the work separate in different directories. If a script and its results are reasonably expected to be interesting for a reader of the paper, put it in `experiments/`. If it is merely used in our own exploration and understanding of the research during the work, put it in `understanding/`. The `experiments/` scripts are the ones that are expected to be reproducible and interesting to a reader of the paper. The `understanding/` scripts are for our own exploration and understanding of the research during the work.
+
 ## End-to-end pipeline
 
 The pipeline is **always**: download a model zoo → create its fixed split (`data/create_split.py`) → preprocess into tokenized tensors → pretrain SANE autoencoder → run a downstream task (property prediction or sampling/finetuning). Every experiment script assumes the previous stages have been completed and on-disk artifacts exist at hardcoded relative paths. Read the script before running it — paths to pretrained checkpoints (`model_path = Path("path/to/your/model")`) must be filled in by hand.
