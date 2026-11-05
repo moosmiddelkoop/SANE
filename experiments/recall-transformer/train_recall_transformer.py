@@ -1,4 +1,4 @@
-"""End-to-end per-class recall prediction from weight tokens, Fashion-MNIST unthi zoo.
+"""End-to-end per-class recall prediction from weight tokens, one unthi zoo (mnist, fmnist, cifar10 or svhn).
 
 No autoencoder and no frozen embedding: one transformer encoder (RecallTransformer in
 src/SANE/models/def_recall_transformer.py) reads the weight tokens of a checkpoint and
@@ -6,18 +6,18 @@ predicts its 10 per-class recalls. It is trained end to end with MSE.
 
 --init scratch: small encoder (d_model 256, 4 layers, 4 heads), random initialization.
 --init sane: size of the SANE encoder. Tokenizer, position embeddings and transformer come
-  from the pretrained Fashion-MNIST SANE encoder (checkpoint_000050); the CLS token and the
-  head are new. That encoder was pretrained on an older random split without a split_id,
-  so it has seen the weights (not the recall) of some models of this test split.
+  from the pretrained SANE encoder of the zoo (SANE_RUNS, checkpoint_000050); the CLS token
+  and the head are new. These encoders were pretrained on an older random split without a
+  split_id, so they have seen the weights (not the recall) of some models of this test split.
 
-Data: unthi_fmnist_preprocessed/tokens_ep4-8.pt from build_tokens.py. Checkpoints 4 and 8 are one
+Data: unthi_<zoo>_preprocessed/tokens_ep4-8.pt from build_tokens.py. Checkpoints 4 and 8 are one
 training set. Targets are standardized with the train mean and std of each class.
 Training: AdamW, cosine learning rate per step, bf16 autocast on GPU. The epoch with the
 lowest val loss is kept. Metrics per checkpoint (4, 8) on train and test in recall units, as
 in resnet18-cifar100/recall_prediction_allepochs.py: MSE, MAE, R^2 per class (mean over
 classes), R^2 per model (mean over models), interaction R^2.
 Logs to W&B project sane-recall-transformer. Writes results/<run>.json and results/<run>.pt.
-Run: sbatch train_recall_transformer_fmnist.sh [scratch|sane] [seed]
+Run: sbatch train_recall_transformer.sh <zoo> [scratch|sane] [seed]
 """
 
 import copy
@@ -39,16 +39,26 @@ from SANE.utils import seed_everything
 logging.basicConfig(level=logging.INFO)
 
 parser = ArgumentParser()
+parser.add_argument("--zoo", choices=["mnist", "fmnist", "cifar10", "svhn"], required=True)
 parser.add_argument("--init", choices=["scratch", "sane"], default="scratch")
 parser.add_argument("--seed", type=int, default=0)
 args = parser.parse_args()
 
-ZOO_ROOT = Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_fmnist")
-CACHE_PT = Path("/projects/prjs2156/shared/wsl/unthi_zoo/unthi_fmnist_preprocessed/tokens_ep4-8.pt")
-SANE_RUN = Path("/projects/prjs2156/shared/wsl/metanets/sane_pretraining/fmnist/fmnist-v1.0_d3e0b_00000_2026-07-15_10-54-45")
+PROJECT_DIR = Path("/projects/prjs2156/shared/wsl/unthi_zoo")
+# as in build_tokens.py
+ZOO_ROOT = PROJECT_DIR / "unthi_fmnist" if args.zoo == "fmnist" else Path(f"/scratch-shared/mmiddelkoop/unthi_zoo/unthi_{args.zoo}")
+CACHE_PT = PROJECT_DIR / f"unthi_{args.zoo}_preprocessed" / "tokens_ep4-8.pt"
+# the SANE encoders used downstream (CLAUDE.md), all at checkpoint_000050
+SANE_RUNS = {
+    "mnist": "mnist-v2.0_6133f_00000_2026-07-15_11-48-49",
+    "fmnist": "fmnist-v1.0_d3e0b_00000_2026-07-15_10-54-45",
+    "cifar10": "cifar10-v1.0_d496b_00000_2026-07-15_10-54-47",
+    "svhn": "svhn-v1.0_d4950_00000_2026-07-15_10-54-47",
+}
+SANE_RUN = Path("/projects/prjs2156/shared/wsl/metanets/sane_pretraining") / args.zoo / SANE_RUNS[args.zoo]
 SANE_CHECKPOINT = SANE_RUN / "checkpoint_000050" / "state.pt"
 OUT_DIR = Path("results")
-RUN_NAME = f"fmnist-{args.init}-seed{args.seed}"
+RUN_NAME = f"{args.zoo}-{args.init}-seed{args.seed}"
 
 EPOCHS = 100
 BATCH_SIZE = 256
@@ -131,7 +141,7 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS *
 wandb.init(
     project="sane-recall-transformer",
     name=RUN_NAME,
-    config={"init": args.init, "seed": args.seed, "epochs": EPOCHS, "batch_size": BATCH_SIZE, "lr": LR,
+    config={"zoo": args.zoo, "init": args.init, "seed": args.seed, "epochs": EPOCHS, "batch_size": BATCH_SIZE, "lr": LR,
             "weight_decay": WEIGHT_DECAY, "dropout": DROPOUT, **model_size, "split_id": cache["split_id"]},
 )
 best_val_loss = float("inf")
