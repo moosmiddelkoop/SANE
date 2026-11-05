@@ -5,7 +5,9 @@ Loads every model of the zoo with DatasetTokens, with the settings of the SANE p
 batch norm, tokensize 145, weight threshold 100. The standardization statistics come from all
 9 checkpoints (0-8) of a split, as in SANE pretraining. Only checkpoints 4 and 8 are kept:
 per-class recall is valid at 0, 4 and 8, and 0 is the random init. A checkpoint that the
-weight threshold drops is not in the cache.
+weight threshold drops is not in the cache. A checkpoint without per-class recall (-999, e.g.
+NN_unthi_fashion_mnist_11172982_9999 at all iterations) is not in the cache either; the log
+names these models.
 
 Zoo: Fashion-MNIST is read from /projects (extracted by silic); the other zoos from their
 scratch copy, which build_tokens.sh unzips. Each zoo needs <zoo>/split.json.
@@ -51,7 +53,7 @@ SENTINEL = -999
 SEED = 0
 
 seed_everything(SEED)
-tokens, Y, epoch, model_dir, split_of_sample = [], [], [], [], []
+tokens, Y, epoch, model_dir, split_of_sample, models_without_recall = [], [], [], [], [], set()
 for split in ["train", "val", "test"]:
     logging.info(f"Building DatasetTokens split={split}")
     ds = DatasetTokens(
@@ -73,18 +75,23 @@ for split in ["train", "val", "test"]:
     )
     for model_index, model_epochs in enumerate(ds.epochs):
         for epoch_index, model_epoch in enumerate(model_epochs):
-            if model_epoch in KEPT_EPOCHS:
-                tokens.append(ds.data[model_index][epoch_index])
-                Y.append([ds.properties[key][model_index][epoch_index] for key in ACC_CLASS_KEYS])
-                epoch.append(model_epoch)
-                model_dir.append(Path(ds.paths[model_index][0]).name)
-                split_of_sample.append(split)
+            if model_epoch not in KEPT_EPOCHS:
+                continue
+            recall = [ds.properties[key][model_index][epoch_index] for key in ACC_CLASS_KEYS]
+            if SENTINEL in recall:
+                models_without_recall.add(Path(ds.paths[model_index][0]).name)
+                continue
+            tokens.append(ds.data[model_index][epoch_index])
+            Y.append(recall)
+            epoch.append(model_epoch)
+            model_dir.append(Path(ds.paths[model_index][0]).name)
+            split_of_sample.append(split)
     positions, split_id = ds.positions, ds.split_id
     del ds
     gc.collect()
 
+logging.info(f"Dropped models without per-class recall ({len(models_without_recall)}): {sorted(models_without_recall)}")
 Y = torch.tensor(Y)
-assert (Y != SENTINEL).all(), "per-class recall is missing at a kept checkpoint"
 torch.save(
     {
         "tokens": torch.stack(tokens),
