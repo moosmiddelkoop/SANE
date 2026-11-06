@@ -19,12 +19,17 @@ set. Targets are standardized with the train mean and std of each class.
   the setup learns anything: SANE embeddings predict the test accuracy of model zoos well.
 Regularization: --noise multiplies the train tokens by (1 + noise * N(0, 1)) at each step, as
   SANE (trainset::add_noise_view_1 = 0.1, multiplicative); --dropout, --weight_decay.
+  --permutations N: permutation augmentation. At the start, N random permutations of the
+  ResNet-18 neurons (resnet18_permutation_spec) become index maps over the tokens, as in SANE's
+  precompute_permutations (without Ray, which fails on nodes without a GPU driver). Each train sample of each step gets one of them at random, so the
+  model sees an equivalent model (same function, same recall) with its neurons in another order.
+  The canonical form stays for val and test. SANE stores 5 permutations per sample.
 Training: AdamW, cosine learning rate per step, bf16 autocast on GPU. The epoch with the
 lowest val loss is kept. Metrics per checkpoint epoch on train and test in recall units:
 MSE, MAE, R^2 per class, R^2 per model, interaction R^2 (as in train_recall_transformer.py);
 for --target accuracy: MSE, MAE, R^2.
 Logs to W&B project sane-recall-transformer. Writes results/<run>.json and results/<run>.pt.
-Run: sbatch train_recall_transformer_resnet18.sh [seed] [--target ...] [--noise ...] [--dropout ...] [--weight_decay ...]
+Run: sbatch train_recall_transformer_resnet18.sh [seed] [--target ...] [--noise ...] [--dropout ...] [--weight_decay ...] [--permutations ...]
 """
 
 import copy
@@ -39,7 +44,9 @@ import torch
 import torch.nn.functional as F
 import wandb
 
+from SANE.datasets.dataset_auxiliaries import tokenize_checkpoint, tokens_to_checkpoint
 from SANE.datasets.zoo_split import load_split
+from SANE.git_re_basin.git_re_basin import apply_permutation, resnet18_permutation_spec
 from SANE.models.def_recall_transformer import RecallTransformer
 from SANE.utils import seed_everything
 
@@ -53,12 +60,13 @@ parser.add_argument("--target", choices=["recall", "accuracy"], default="recall"
 parser.add_argument("--noise", type=float, default=0.0)
 parser.add_argument("--dropout", type=float, default=0.1)
 parser.add_argument("--weight_decay", type=float, default=0.01)
+parser.add_argument("--permutations", type=int, default=0)
 args = parser.parse_args()
 
 ZOO_ROOT = Path("/projects/prjs2156/shared/wsl/cifar100_resnet18/tune_zoo_cifar100_resnet18_kaiming_uniform")
 CACHE_DIR = Path(args.cache_dir)
 OUT_DIR = Path("results")
-RUN_NAME = f"resnet18-cifar100-{args.target}-noise{args.noise}-do{args.dropout}-wd{args.weight_decay}-seed{args.seed}"
+RUN_NAME = f"resnet18-cifar100-{args.target}-noise{args.noise}-do{args.dropout}-wd{args.weight_decay}-perm{args.permutations}-seed{args.seed}"
 
 JOIN = 16
 BATCH_SIZE = 64
@@ -82,6 +90,24 @@ Y = {s: targets_all[rows[s]] for s in SPLITS}
 epoch_of_sample = {s: meta["epoch"][rows[s]] for s in SPLITS}
 Y_mean, Y_std = Y["train"].mean(dim=0), Y["train"].std(dim=0)
 logging.info(", ".join(f"{s}: {len(Y[s])} samples" for s in SPLITS))
+
+if args.permutations:
+    reference = torch.load(ZOO_ROOT / meta["model_dir"][0] / "checkpoint_000060" / "checkpoints", map_location="cpu")
+    spec = resnet18_permutation_spec()
+    # a checkpoint whose values are their own positions in the flattened token sequence
+    _, padding_mask, reference_positions = tokenize_checkpoint(reference, tokensize=tokensize, return_mask=True, ignore_bn=True)
+    flat_index = torch.arange(n_tokens * tokensize, dtype=torch.float64).view(n_tokens, tokensize)
+    index_checkpoint = tokens_to_checkpoint(flat_index, reference_positions, {k: v.double() for k, v in reference.items()}, ignore_bn=True)
+    permutation_pool = []
+    for _ in range(args.permutations):
+        permutation = {p: torch.randperm(reference[axes[0][0]].shape[axes[0][1]]) for p, axes in spec.perm_to_axes.items()}
+        permuted_index, _, _ = tokenize_checkpoint(apply_permutation(spec, permutation, index_checkpoint), tokensize=tokensize, return_mask=True, ignore_bn=True)
+        permutation_pool.append(permuted_index.view(-1).to(torch.int32))
+    permutation_pool = torch.stack(permutation_pool).to(device)  # [N, n_tokens * tokensize]
+    # padding values must stay 0: the index maps point padding at value 0 of the sequence
+    padding_mask = padding_mask.to(device=device, dtype=torch.float16)
+    assert padding_mask.shape == (n_tokens, tokensize)
+    logging.info(f"{args.permutations} permutations ready")
 
 n_padding_tokens = -n_tokens % JOIN
 joined_positions = meta["positions"][::JOIN].clone()  # layer and channel of the first token
@@ -161,7 +187,7 @@ wandb.init(
     project="sane-recall-transformer",
     name=RUN_NAME,
     config={"zoo": "resnet18-cifar100", "init": "scratch", "seed": args.seed, "epochs": args.epochs, "batch_size": BATCH_SIZE,
-            "lr": LR, "weight_decay": args.weight_decay, "dropout": args.dropout, "target": args.target, "noise": args.noise, "join": JOIN, **MODEL_SIZE,
+            "lr": LR, "weight_decay": args.weight_decay, "dropout": args.dropout, "target": args.target, "noise": args.noise, "permutations": args.permutations, "join": JOIN, **MODEL_SIZE,
             "n_parameters": n_parameters, "split_id": meta["split_id"]},
 )
 best_val_loss = float("inf")
@@ -169,6 +195,10 @@ for epoch in range(args.epochs):
     model.train()
     train_losses = []
     for batch_tokens, batch_targets in batches("train", shuffle=True):
+        if args.permutations:
+            for i, choice in enumerate(torch.randint(args.permutations, (len(batch_tokens),))):
+                permuted = batch_tokens[i].view(-1)[permutation_pool[choice].long()].view(n_tokens, tokensize)
+                batch_tokens[i] = permuted * padding_mask
         if args.noise > 0:
             batch_tokens = batch_tokens * (1 + args.noise * torch.randn_like(batch_tokens))
         loss = F.mse_loss(forward(batch_tokens), batch_targets.to(device))
