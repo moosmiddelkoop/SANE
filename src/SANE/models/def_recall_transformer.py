@@ -75,3 +75,47 @@ class RecallTransformer(nn.Module):
         encoder_state = {k: v for k, v in sane_state_dict.items() if k.startswith(SANE_ENCODER_PREFIXES)}
         missing, unexpected = self.load_state_dict(encoder_state, strict=False)
         assert not unexpected and all(k == "cls_token" or k.startswith("head.") for k in missing), missing
+
+
+class ClassTokenRecallTransformer(nn.Module):
+    """Transformer encoder with one input token and one output per class.
+
+    Class token c is the last-layer (fc) row of class c: its weights and bias, class_dim values.
+    The body tokens (all layers before fc) are optional and go in front, with position
+    embeddings as in RecallTransformer. One shared head maps the output at each class token to
+    one value. class_index=False: all class tokens get the same learned embedding, so the model
+    treats all classes alike. class_index=True: each class gets its own learned embedding.
+    """
+
+    def __init__(self, class_dim, n_classes, class_index, d_model, nhead, num_layers, dropout, body_dim=None, max_positions=None):
+        super().__init__()
+        self.n_classes = n_classes
+        self.class_tokenizer = nn.Linear(class_dim, d_model)
+        self.class_embedding = nn.Parameter(torch.zeros(1, n_classes if class_index else 1, d_model))
+        if body_dim:
+            self.body_tokenizer = nn.Linear(body_dim, d_model)
+            self.pe = PositionEmbs(max_positions=max_positions, embedding_dim=d_model)
+        self.dropout = nn.Dropout(dropout)
+        self.transformer_encoder = TransformerEncoder(
+            n_layer=num_layers, n_head=nhead, d_model=d_model, dropout=dropout, bias=False, causal=False
+        )
+        self.head = nn.Sequential(nn.LayerNorm(d_model), nn.Linear(d_model, 1))
+
+        # initialization as in RecallTransformer (GPT-2)
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+                if module.bias is not None:
+                    torch.nn.init.zeros_(module.bias)
+        torch.nn.init.normal_(self.class_embedding, mean=0.0, std=0.02)
+        for name, parameter in self.named_parameters():
+            if name.endswith("c_proj.weight"):
+                torch.nn.init.normal_(parameter, mean=0.0, std=0.02 / math.sqrt(2 * num_layers))
+
+    def forward(self, class_tokens, body_tokens=None, body_positions=None):
+        """class_tokens [batch, n_classes, class_dim], body_tokens [batch, n_body, body_dim] -> [batch, n_classes]"""
+        x = self.class_tokenizer(class_tokens) + self.class_embedding
+        if body_tokens is not None:
+            x = torch.cat([self.pe(self.body_tokenizer(body_tokens), body_positions), x], dim=1)
+        x = self.transformer_encoder(self.dropout(x))
+        return self.head(x[:, -self.n_classes :]).squeeze(-1)
