@@ -14,11 +14,17 @@ Data: tokens_ep5-60.bin + tokens_ep5-60_meta.pt from build_tokens_resnet18.py, r
 at the start (272 GB, so the job needs about 300 GB): random reads from GPFS were too slow
 (about 30 MB/s per reader, so one epoch would take hours). Checkpoints 5, 10, ..., 60 are one training
 set. Targets are standardized with the train mean and std of each class.
+--target recall: the 100 per-class recalls. --target accuracy: one output, the test accuracy
+  (the mean of the 100 recalls, as each CIFAR-100 class has 100 test images). This checks if
+  the setup learns anything: SANE embeddings predict the test accuracy of model zoos well.
+Regularization: --noise multiplies the train tokens by (1 + noise * N(0, 1)) at each step, as
+  SANE (trainset::add_noise_view_1 = 0.1, multiplicative); --dropout, --weight_decay.
 Training: AdamW, cosine learning rate per step, bf16 autocast on GPU. The epoch with the
 lowest val loss is kept. Metrics per checkpoint epoch on train and test in recall units:
-MSE, MAE, R^2 per class, R^2 per model, interaction R^2 (as in train_recall_transformer.py).
+MSE, MAE, R^2 per class, R^2 per model, interaction R^2 (as in train_recall_transformer.py);
+for --target accuracy: MSE, MAE, R^2.
 Logs to W&B project sane-recall-transformer. Writes results/<run>.json and results/<run>.pt.
-Run: sbatch train_recall_transformer_resnet18.sh [seed]
+Run: sbatch train_recall_transformer_resnet18.sh [seed] [--target ...] [--noise ...] [--dropout ...] [--weight_decay ...]
 """
 
 import copy
@@ -43,18 +49,20 @@ parser = ArgumentParser()
 parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("--cache_dir", default="/scratch-shared/mmiddelkoop/recall_transformer/resnet18_cifar100")
 parser.add_argument("--epochs", type=int, default=50)
+parser.add_argument("--target", choices=["recall", "accuracy"], default="recall")
+parser.add_argument("--noise", type=float, default=0.0)
+parser.add_argument("--dropout", type=float, default=0.1)
+parser.add_argument("--weight_decay", type=float, default=0.01)
 args = parser.parse_args()
 
 ZOO_ROOT = Path("/projects/prjs2156/shared/wsl/cifar100_resnet18/tune_zoo_cifar100_resnet18_kaiming_uniform")
 CACHE_DIR = Path(args.cache_dir)
 OUT_DIR = Path("results")
-RUN_NAME = f"resnet18-cifar100-scratch-seed{args.seed}"
+RUN_NAME = f"resnet18-cifar100-{args.target}-noise{args.noise}-do{args.dropout}-wd{args.weight_decay}-seed{args.seed}"
 
 JOIN = 16
 BATCH_SIZE = 64
 LR = 3e-4
-WEIGHT_DECAY = 0.01
-DROPOUT = 0.1
 MODEL_SIZE = {"d_model": 256, "nhead": 4, "num_layers": 4}
 SPLITS = ["train", "val", "test"]
 
@@ -69,7 +77,8 @@ logging.info("Reading the token cache into RAM")
 tokens = torch.from_numpy(np.fromfile(CACHE_DIR / "tokens_ep5-60.bin", dtype=np.float16)).view(meta["shape"])
 logging.info("Token cache read")
 rows = {s: torch.tensor([split == s for split in meta["split"]]).nonzero().squeeze(1) for s in SPLITS}
-Y = {s: meta["Y"][rows[s]].float() for s in SPLITS}
+targets_all = meta["Y"].float() if args.target == "recall" else meta["Y"].float().mean(dim=1, keepdim=True)
+Y = {s: targets_all[rows[s]] for s in SPLITS}
 epoch_of_sample = {s: meta["epoch"][rows[s]] for s in SPLITS}
 Y_mean, Y_std = Y["train"].mean(dim=0), Y["train"].std(dim=0)
 logging.info(", ".join(f"{s}: {len(Y[s])} samples" for s in SPLITS))
@@ -83,7 +92,7 @@ model = RecallTransformer(
     i_dim=JOIN * tokensize,
     max_positions=(joined_positions.max(dim=0).values + 1).tolist(),
     n_classes=Y["train"].shape[1],
-    dropout=DROPOUT,
+    dropout=args.dropout,
     **MODEL_SIZE,
 ).to(device)
 n_parameters = sum(p.numel() for p in model.parameters())
@@ -128,6 +137,9 @@ def recall_metrics(predictions, targets):
     """predictions and targets [models, classes] in recall units (as in train_recall_transformer.py)"""
     predictions, targets = predictions.double(), targets.double()
     errors = predictions - targets
+    if targets.shape[1] == 1:  # --target accuracy
+        r2 = 1 - (errors**2).sum() / ((targets - targets.mean()) ** 2).sum()
+        return {"mse": (errors**2).mean().item(), "mae": errors.abs().mean().item(), "r2": r2.item()}
     interaction = double_center(targets)
     r2_interaction = 1 - ((interaction - double_center(predictions)) ** 2).sum() / (interaction**2).sum()
     squared_errors = errors**2
@@ -143,13 +155,13 @@ def recall_metrics(predictions, targets):
 
 
 n_train_batches = -(-len(rows["train"]) // BATCH_SIZE)
-optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
+optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=args.weight_decay)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs * n_train_batches)
 wandb.init(
     project="sane-recall-transformer",
     name=RUN_NAME,
     config={"zoo": "resnet18-cifar100", "init": "scratch", "seed": args.seed, "epochs": args.epochs, "batch_size": BATCH_SIZE,
-            "lr": LR, "weight_decay": WEIGHT_DECAY, "dropout": DROPOUT, "join": JOIN, **MODEL_SIZE,
+            "lr": LR, "weight_decay": args.weight_decay, "dropout": args.dropout, "target": args.target, "noise": args.noise, "join": JOIN, **MODEL_SIZE,
             "n_parameters": n_parameters, "split_id": meta["split_id"]},
 )
 best_val_loss = float("inf")
@@ -157,6 +169,8 @@ for epoch in range(args.epochs):
     model.train()
     train_losses = []
     for batch_tokens, batch_targets in batches("train", shuffle=True):
+        if args.noise > 0:
+            batch_tokens = batch_tokens * (1 + args.noise * torch.randn_like(batch_tokens))
         loss = F.mse_loss(forward(batch_tokens), batch_targets.to(device))
         optimizer.zero_grad()
         loss.backward()
@@ -170,7 +184,7 @@ for epoch in range(args.epochs):
         best_val_loss, best_epoch, best_state = val_loss, epoch, copy.deepcopy(model.state_dict())
 
 model.load_state_dict(best_state)
-results = {"run": RUN_NAME, "seed": args.seed, "best_epoch": best_epoch, "best_val_loss": best_val_loss, "metrics": {}}
+results = {"run": RUN_NAME, **vars(args), "best_epoch": best_epoch, "best_val_loss": best_val_loss, "metrics": {}}
 for split in ["train", "test"]:
     predictions = predict(split) * Y_std + Y_mean
     for model_epoch in sorted(set(epoch_of_sample[split].tolist())):

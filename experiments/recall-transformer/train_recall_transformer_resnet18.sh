@@ -10,7 +10,7 @@
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=moos@cwi.nl
 
-# usage: sbatch train_recall_transformer_resnet18.sh [seed: 0]
+# usage: sbatch train_recall_transformer_resnet18.sh [seed: 0] [more arguments of the .py, e.g. --target=accuracy]
 # needs tokens_ep5-60.bin from: sbatch build_tokens_resnet18.sh
 
 set -euo pipefail
@@ -19,4 +19,4 @@ cd "$HOME/SANE/experiments/recall-transformer"
 mkdir -p logs
 source "$HOME/SANE/.venv/bin/activate"
 
-python train_recall_transformer_resnet18.py --seed="${1:-0}"
+python train_recall_transformer_resnet18.py --seed="${1:-0}" "${@:2}"
