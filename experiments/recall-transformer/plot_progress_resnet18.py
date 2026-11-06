@@ -24,9 +24,9 @@ SCORE = "best_val_r2_interaction_ep5-45"
 # in the order they were run: (results file, what changed)
 RUNS = [
     ("resnet18-cifar100-classtoken-fc-ep5-60-noise0.1-do0.3-wd0.1-perm100-seed0.json", "class tokens, fc only"),
-    ("resnet18-cifar100-classtoken-full-ep5-60-noise0.1-do0.3-wd0.1-perm100-seed0.json", "class tokens + body"),
     ("resnet18-cifar100-classtoken-fc-classindex-ep5-60-noise0.1-do0.3-wd0.1-perm100-seed0.json", "fc only, class index"),
     ("resnet18-cifar100-classtoken-fc-ep5-45-noise0.1-do0.3-wd0.1-perm100-seed0.json", "fc only, train epochs 5-45"),
+    ("resnet18-cifar100-classtoken-full-ep5-60-noise0.1-do0.3-wd0.1-perm100-seed0.json", "class tokens + body"),
 ]
 EARLIER_RUNS = [
     "resnet18-cifar100-scratch-seed0.json",
@@ -45,7 +45,7 @@ runs = [(label, json.loads((RESULTS_DIR / name).read_text())[SCORE]) for name, l
 
 fig, ax = plt.subplots(figsize=(10, 5))
 ax.axhline(probe_score, color=REFERENCE_COLOR, linestyle="--", linewidth=1, label=f"fc-row probe, linear ({probe_score:.3f})")
-ax.axhline(earlier_score, color=REFERENCE_COLOR, linestyle=":", linewidth=1, label=f"earlier recall transformers, test ({earlier_score:.3f})")
+ax.axhline(earlier_score, color=REFERENCE_COLOR, linestyle=":", linewidth=1, label=f"earlier recall transformers, test ({abs(earlier_score):.3f})")
 best, running_best, n_kept = -float("inf"), [], 0
 for index, (label, score) in enumerate(runs):
     kept = score > best
@@ -54,7 +54,7 @@ for index, (label, score) in enumerate(runs):
     n_kept += kept
     if kept:
         ax.scatter(index, score, s=60, color=KEPT_COLOR, edgecolor="black", linewidth=0.6, zorder=3, label="Kept" if n_kept == 1 else None)
-        ax.annotate(label, (index, score), xytext=(8, 8), textcoords="offset points", rotation=25, fontsize=9, color="#0f6e56")
+        ax.annotate(label, (index, score), xytext=(8, 6), textcoords="offset points", fontsize=9, color="#0f6e56")
     else:
         ax.scatter(index, score, s=25, color=DISCARDED_COLOR, zorder=2, label="Discarded" if index - n_kept == 0 else None)
         ax.annotate(label, (index, score), xytext=(8, -14), textcoords="offset points", fontsize=8, color="#5f5e5a")
