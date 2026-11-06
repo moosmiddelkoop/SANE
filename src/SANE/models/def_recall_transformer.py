@@ -3,10 +3,29 @@ import math
 import torch
 import torch.nn as nn
 
+from SANE.datasets.dataset_auxiliaries import tokenize_checkpoint
+from SANE.git_re_basin.git_re_basin import apply_permutation, weight_matching
 from SANE.models.def_AE import PositionEmbs
 from SANE.models.def_transformer import TransformerEncoder
 
 SANE_ENCODER_PREFIXES = ("tokenizer.", "pe.", "transformer_encoder.")
+
+
+def prepare_tokens(checkpoint, preprocessing, permutation_spec):
+    """Tokens [n_tokens, tokensize] of one raw checkpoint (a state dict), as DatasetTokens makes them.
+
+    preprocessing: the preprocessing.pt of the zoo (reference_checkpoint, layers, tokensize).
+    1. Canonical form: permute the checkpoint to match the reference checkpoint of the zoo.
+    2. Standardize each layer (weight and bias) with the mean and std of the train split.
+    3. Cut the layers into tokens (ignore_bn=True)."""
+    permutation = weight_matching(ps=permutation_spec, params_a=preprocessing["reference_checkpoint"], params_b=checkpoint)
+    checkpoint = apply_permutation(ps=permutation_spec, perm=permutation, params=checkpoint)
+    for weight_key, stats in preprocessing["layers"].items():
+        for key in (weight_key, weight_key.replace("weight", "bias")):
+            if key in checkpoint:
+                checkpoint[key] = (checkpoint[key] - stats["mean"]) / stats["std"]
+    tokens, _, _ = tokenize_checkpoint(checkpoint, tokensize=preprocessing["tokensize"], return_mask=True, ignore_bn=True)
+    return tokens
 
 
 class RecallTransformer(nn.Module):
