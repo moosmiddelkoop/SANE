@@ -32,14 +32,7 @@ Only report to me in ASD-STE100 Simplified Technical English.
 - Put the context and reasoning after the action.
 - Use numbered steps for a sequence.
 - Put one bounded action in each step.
-- Use a maximum of five items in one list.
-- Split a longer list into:
-  "Do now"
-  and
-  "Do later"
 - Restate the task state during every turn of a multi-step task.
-- Use this format:
-  "Step 3 of 5 done: schema updated. Next: backfill."
 - Do not assume that the user remembers the previous message.
 - Do not use vague estimates such as:
   "This will take some work."
