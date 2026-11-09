@@ -8,8 +8,8 @@
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=moos@cwi.nl
 
-# usage: sbatch export_metanets.sh <zoo: mnist, fmnist, cifar10 or svhn>
-# needs the extracted zoo (build_tokens.sh) and results/<zoo>-{scratch,sane}-seed0.pt
+# usage: sbatch export_metanets.sh <zoo: mnist, fmnist, cifar10 or svhn> [--noise ...] [--permutations ...]
+# needs the extracted zoo (build_tokens.sh) and results/<zoo>-{scratch,sane}[-noise<n>-perm<N>]-seed0.pt
 
 set -euo pipefail
 
@@ -21,4 +21,4 @@ source "$HOME/SANE/.venv/bin/activate"
 export RAY_TMPDIR=/dev/shm/ray_$SLURM_JOB_ID
 trap 'rm -rf "$RAY_TMPDIR"' EXIT
 
-python export_metanets.py --zoo="$1"
+python export_metanets.py --zoo="$1" "${@:2}"

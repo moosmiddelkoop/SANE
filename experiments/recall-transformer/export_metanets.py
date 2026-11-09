@@ -11,7 +11,10 @@ Writes to /projects/prjs2156/shared/wsl/metanets/recall_transformer/<zoo>/:
 Checks: (1) the bundle reproduces the test MSE at checkpoint 8 of results/<run>.json on the cached
 tokens; (2) prepare_tokens on raw train checkpoints gives about the cached tokens and predictions
 (logged; canonical form is stochastic, so they are not identical).
-Run: sbatch export_metanets.sh <zoo> (CPU, about 1-2 h).
+--noise, --permutations: export the runs trained with this augmentation (train_recall_transformer.py).
+  If preprocessing.pt already exists, it is reused and not rebuilt: canonical form is stochastic,
+  so a rebuild would change the input of the bundles already exported.
+Run: sbatch export_metanets.sh <zoo> [--noise ...] [--permutations ...] (CPU, about 1-2 h; less with an existing preprocessing.pt).
 """
 
 import os
@@ -35,7 +38,11 @@ logging.basicConfig(level=logging.INFO)
 
 parser = ArgumentParser()
 parser.add_argument("--zoo", choices=["mnist", "fmnist", "cifar10", "svhn"], required=True)
-ZOO = parser.parse_args().zoo
+parser.add_argument("--noise", type=float, default=0.0)
+parser.add_argument("--permutations", type=int, default=0)
+args = parser.parse_args()
+ZOO = args.zoo
+AUGMENTATION = f"-noise{args.noise}-perm{args.permutations}" if args.noise or args.permutations else ""  # as in train_recall_transformer.py
 
 # as in train_recall_transformer.py
 PROJECT_DIR = Path("/projects/prjs2156/shared/wsl/unthi_zoo")
@@ -61,34 +68,38 @@ seed_everything(0)
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # same settings as build_tokens.py
-ds = DatasetTokens(
-    root=ZOO_ROOT,
-    epoch_lst=list(range(9)),
-    mode="vector",
-    permutation_spec=smallcnnzoo_permutation_spec(),
-    map_to_canonical=True,
-    standardize=True,
-    tokensize=145,
-    train_val_test="train",
-    weight_threshold=100,
-    max_samples=None,
-    property_keys={"result_keys": ACC_CLASS_KEYS, "config_keys": []},
-    num_threads=NUM_THREADS,
-    verbosity=3,
-    getitem="tokens+props",
-    ignore_bn=True,
-)
-preprocessing = {
-    "reference_checkpoint": ds.reference_checkpoint,
-    "layers": ds.layers,
-    "positions": ds.positions,
-    "tokensize": 145,
-    "ignore_bn": True,
-    "weight_threshold": 100,
-    "split_id": ds.split_id,
-}
-del ds
-torch.save(preprocessing, OUT_DIR / "preprocessing.pt")
+PREPROCESSING_PT = OUT_DIR / "preprocessing.pt"
+if PREPROCESSING_PT.exists():
+    preprocessing = torch.load(PREPROCESSING_PT)
+else:
+    ds = DatasetTokens(
+        root=ZOO_ROOT,
+        epoch_lst=list(range(9)),
+        mode="vector",
+        permutation_spec=smallcnnzoo_permutation_spec(),
+        map_to_canonical=True,
+        standardize=True,
+        tokensize=145,
+        train_val_test="train",
+        weight_threshold=100,
+        max_samples=None,
+        property_keys={"result_keys": ACC_CLASS_KEYS, "config_keys": []},
+        num_threads=NUM_THREADS,
+        verbosity=3,
+        getitem="tokens+props",
+        ignore_bn=True,
+    )
+    preprocessing = {
+        "reference_checkpoint": ds.reference_checkpoint,
+        "layers": ds.layers,
+        "positions": ds.positions,
+        "tokensize": 145,
+        "ignore_bn": True,
+        "weight_threshold": 100,
+        "split_id": ds.split_id,
+    }
+    del ds
+    torch.save(preprocessing, PREPROCESSING_PT)
 
 cache = torch.load(CACHE_PT)
 assert cache["split_id"] == preprocessing["split_id"]
@@ -118,7 +129,7 @@ def predict_recall(model, tokens):
 
 
 for init in ["scratch", "sane"]:
-    run = f"{ZOO}-{init}-seed0"
+    run = f"{ZOO}-{init}{AUGMENTATION}-seed0"
     model_kwargs = {"i_dim": 145, "max_positions": SANE_CONFIG["ae:max_positions"], "n_classes": 10, "dropout": 0.1, **MODEL_SIZE[init]}
     model = RecallTransformer(**model_kwargs)
     model.load_state_dict(torch.load(RESULTS_DIR / f"{run}.pt", map_location="cpu"))
