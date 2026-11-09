@@ -9,7 +9,7 @@
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=moos@cwi.nl
 
-# usage: sbatch train_recall_transformer.sh <zoo: mnist, fmnist, cifar10 or svhn> [init: scratch (default) or sane] [seed: 0]
+# usage: sbatch train_recall_transformer.sh <zoo: mnist, fmnist, cifar10 or svhn> [init: scratch (default) or sane] [seed: 0] [--noise ...] [--permutations ...]
 # needs unthi_<zoo>_preprocessed/tokens_ep4-8.pt from: sbatch build_tokens.sh <zoo>
 
 set -euo pipefail
@@ -18,4 +18,4 @@ cd "$HOME/SANE/experiments/recall-transformer"
 mkdir -p logs
 source "$HOME/SANE/.venv/bin/activate"
 
-python train_recall_transformer.py --zoo="$1" --init="${2:-scratch}" --seed="${3:-0}"
+python train_recall_transformer.py --zoo="$1" --init="${2:-scratch}" --seed="${3:-0}" "${@:4}"
